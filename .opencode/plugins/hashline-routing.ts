@@ -74,8 +74,6 @@ export const HashlineRouting: Plugin = async () => {
         return
       }
 
-      output.tool = name
-
       const nextArgs = normalizeArgs(name, (output.args ?? {}) as Record<string, unknown>)
       output.args = nextArgs
     },

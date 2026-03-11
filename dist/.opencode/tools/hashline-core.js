@@ -1,25 +1,13 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.hashlineLineHash = hashlineLineHash;
-exports.resolveFilePath = resolveFilePath;
-exports.runHashlineRead = runHashlineRead;
-exports.runHashlineOperations = runHashlineOperations;
-exports.runLegacyEdit = runLegacyEdit;
-exports.parsePatchText = parsePatchText;
-exports.mapOperationInput = mapOperationInput;
-const node_crypto_1 = require("node:crypto");
-const node_fs_1 = require("node:fs");
-const node_path_1 = __importDefault(require("node:path"));
+import { createHash } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 const DEFAULT_LIMIT = 2000;
 const MAX_LINE_LENGTH = 2000;
 const LINE_HASH_LEN = 4;
 function hashText(text, length = 10) {
-    return (0, node_crypto_1.createHash)("sha1").update(text, "utf8").digest("hex").slice(0, length).toUpperCase();
+    return createHash("sha1").update(text, "utf8").digest("hex").slice(0, length).toUpperCase();
 }
-function hashlineLineHash(line) {
+export function hashlineLineHash(line) {
     return hashText(line, LINE_HASH_LEN);
 }
 function parseRaw(raw) {
@@ -87,12 +75,12 @@ function resolveRef(ref, snapshot) {
         lineNumber: parsed.lineNumber,
     };
 }
-function resolveFilePath(filePath, context) {
+export function resolveFilePath(filePath, context) {
     const baseDirectory = typeof context?.directory === "string" && context.directory.length > 0 ? context.directory : process.cwd();
-    return node_path_1.default.isAbsolute(filePath) ? node_path_1.default.normalize(filePath) : node_path_1.default.resolve(baseDirectory, filePath);
+    return path.isAbsolute(filePath) ? path.normalize(filePath) : path.resolve(baseDirectory, filePath);
 }
 async function readSnapshot(absolutePath) {
-    const raw = await node_fs_1.promises.readFile(absolutePath, "utf8");
+    const raw = await fs.readFile(absolutePath, "utf8");
     const parsed = parseRaw(raw);
     return {
         absolutePath,
@@ -303,8 +291,8 @@ function snapshotFromLines(base, nextLines) {
     };
 }
 async function writeSnapshot(snapshot) {
-    await node_fs_1.promises.mkdir(node_path_1.default.dirname(snapshot.absolutePath), { recursive: true });
-    await node_fs_1.promises.writeFile(snapshot.absolutePath, snapshot.raw, "utf8");
+    await fs.mkdir(path.dirname(snapshot.absolutePath), { recursive: true });
+    await fs.writeFile(snapshot.absolutePath, snapshot.raw, "utf8");
 }
 function formatEditResult(params) {
     return [
@@ -330,7 +318,7 @@ function countOccurrences(haystack, needle) {
         from = idx + needle.length;
     }
 }
-async function runHashlineRead(params) {
+export async function runHashlineRead(params) {
     const absolutePath = resolveFilePath(params.filePath, params.context);
     const snapshot = await readSnapshot(absolutePath);
     const startLine = Math.max(1, Math.floor(params.offset ?? 1));
@@ -361,7 +349,7 @@ async function runHashlineRead(params) {
         "</hashline-file>",
     ].join("\n");
 }
-async function runHashlineOperations(params) {
+export async function runHashlineOperations(params) {
     const absolutePath = resolveFilePath(params.filePath, params.context);
     const existingSnapshot = await readSnapshotIfExists(absolutePath);
     const snapshot = existingSnapshot ?? emptySnapshot(absolutePath);
@@ -387,7 +375,7 @@ async function runHashlineOperations(params) {
         removals: applied.removals,
     });
 }
-async function runLegacyEdit(params) {
+export async function runLegacyEdit(params) {
     const absolutePath = resolveFilePath(params.filePath, params.context);
     const existingSnapshot = await readSnapshotIfExists(absolutePath);
     const snapshot = existingSnapshot ?? emptySnapshot(absolutePath);
@@ -430,7 +418,7 @@ async function runLegacyEdit(params) {
         removals: Math.max(0, snapshot.lines.length - after.lines.length),
     });
 }
-function parsePatchText(patchText) {
+export function parsePatchText(patchText) {
     let parsed;
     try {
         parsed = JSON.parse(patchText);
@@ -453,7 +441,7 @@ function parsePatchText(patchText) {
     }
     throw new Error("patch_text JSON must be an array or object");
 }
-function mapOperationInput(input) {
+export function mapOperationInput(input) {
     return {
         op: input.op,
         ref: input.ref,

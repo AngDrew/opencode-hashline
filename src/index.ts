@@ -1,5 +1,5 @@
 import type { Plugin } from "@opencode-ai/plugin"
-import routingPlugin from "../.opencode/plugins/hashline-routing"
+import { HashlineRouting as routingPlugin } from "../.opencode/plugins/hashline-routing"
 import readTool from "../.opencode/tools/read"
 import editTool from "../.opencode/tools/edit"
 import patchTool from "../.opencode/tools/patch"

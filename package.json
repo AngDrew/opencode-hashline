@@ -27,8 +27,8 @@
     "tools"
   ],
   "license": "MIT",
-  "dependencies": {
-    "@opencode-ai/plugin": "1.2.22"
+  "peerDependencies": {
+    "@opencode-ai/plugin": "^1.2.22"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

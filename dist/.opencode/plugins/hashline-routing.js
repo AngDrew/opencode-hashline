@@ -1,6 +1,3 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.HashlineRouting = void 0;
 const known = new Set(["read", "view", "edit", "patch", "write"]);
 function normalizeName(name) {
     return name === "view" ? "read" : name;
@@ -59,17 +56,15 @@ function normalizeArgs(toolName, args) {
     }
     return out;
 }
-const HashlineRouting = async () => {
+export const HashlineRouting = async () => {
     return {
         "tool.execute.before": async (input, output) => {
             const name = normalizeName(input.tool);
             if (!known.has(name)) {
                 return;
             }
-            output.tool = name;
             const nextArgs = normalizeArgs(name, (output.args ?? {}));
             output.args = nextArgs;
         },
     };
 };
-exports.HashlineRouting = HashlineRouting;
