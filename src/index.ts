@@ -4,7 +4,6 @@ import readTool from "../.opencode/tools/read"
 import editTool from "../.opencode/tools/edit"
 import patchTool from "../.opencode/tools/patch"
 import writeTool from "../.opencode/tools/write"
-import hashlineEditTool from "../.opencode/tools/hashline_edit"
 
 const hashlinePlugin: Plugin = async (input) => {
   const routingHooks = await routingPlugin(input)
@@ -16,7 +15,6 @@ const hashlinePlugin: Plugin = async (input) => {
       edit: editTool,
       patch: patchTool,
       write: writeTool,
-      hashline_edit: hashlineEditTool,
     },
   }
 }

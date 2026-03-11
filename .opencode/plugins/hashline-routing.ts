@@ -27,23 +27,41 @@ function normalizeArgs(toolName: string, args: Record<string, unknown>): Record<
     if (typeof out.file_path === "string" && typeof out.filePath !== "string") {
       out.filePath = out.file_path
     }
-    if (typeof out.oldString === "string" && typeof out.old_string !== "string") {
-      out.old_string = out.oldString
+    if (typeof out.startRef === "string" && typeof out.start_ref !== "string") {
+      out.start_ref = out.startRef
     }
-    if (typeof out.old_string === "string" && typeof out.oldString !== "string") {
-      out.oldString = out.old_string
+    if (typeof out.start_ref === "string" && typeof out.startRef !== "string") {
+      out.startRef = out.start_ref
     }
-    if (typeof out.newString === "string" && typeof out.new_string !== "string") {
-      out.new_string = out.newString
+    if (typeof out.endRef === "string" && typeof out.end_ref !== "string") {
+      out.end_ref = out.endRef
     }
-    if (typeof out.new_string === "string" && typeof out.newString !== "string") {
-      out.newString = out.new_string
+    if (typeof out.end_ref === "string" && typeof out.endRef !== "string") {
+      out.endRef = out.end_ref
+    }
+    if (typeof out.safeReapply === "boolean" && typeof out.safe_reapply !== "boolean") {
+      out.safe_reapply = out.safeReapply
+    }
+    if (typeof out.safe_reapply === "boolean" && typeof out.safeReapply !== "boolean") {
+      out.safeReapply = out.safe_reapply
+    }
+    if (typeof out.expectedFileHash === "string" && typeof out.expected_file_hash !== "string") {
+      out.expected_file_hash = out.expectedFileHash
+    }
+    if (typeof out.expected_file_hash === "string" && typeof out.expectedFileHash !== "string") {
+      out.expectedFileHash = out.expected_file_hash
     }
     if (typeof out.fileRev === "string" && typeof out.file_rev !== "string") {
       out.file_rev = out.fileRev
     }
     if (typeof out.file_rev === "string" && typeof out.fileRev !== "string") {
       out.fileRev = out.file_rev
+    }
+    if (typeof out.dryRun === "boolean" && typeof out.dry_run !== "boolean") {
+      out.dry_run = out.dryRun
+    }
+    if (typeof out.dry_run === "boolean" && typeof out.dryRun !== "boolean") {
+      out.dryRun = out.dry_run
     }
   }
 

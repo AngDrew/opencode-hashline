@@ -142,7 +142,42 @@ export function parseLineRef(rawRef: string): { lineNumber: number; hash: string
   }
 }
 
-function resolveRef(ref: string, snapshot: FileSnapshot): { index: number; lineNumber: number } {
+interface RefCandidate {
+  index: number
+  lineNumber: number
+}
+
+function findRefCandidates(
+  parsed: { lineNumber: number; hash: string; anchor?: string },
+  snapshot: FileSnapshot,
+  hashLength: number,
+): RefCandidate[] {
+  const candidates: RefCandidate[] = []
+
+  for (let idx = 0; idx < snapshot.lines.length; idx += 1) {
+    const line = snapshot.lines[idx]
+    const lineHash = hashlineLineHash(line, hashLength)
+    if (lineHash !== parsed.hash) {
+      continue
+    }
+
+    if (parsed.anchor) {
+      const anchorHash = hashlineAnchorHash(snapshot.lines[idx - 1], line, snapshot.lines[idx + 1], hashLength)
+      if (anchorHash !== parsed.anchor) {
+        continue
+      }
+    }
+
+    candidates.push({
+      index: idx,
+      lineNumber: idx + 1,
+    })
+  }
+
+  return candidates
+}
+
+function resolveRef(ref: string, snapshot: FileSnapshot, safeReapply = false): { index: number; lineNumber: number } {
   const parsed = parseLineRef(ref)
   if (parsed.lineNumber > snapshot.lines.length) {
     throw new Error(
@@ -157,6 +192,25 @@ function resolveRef(ref: string, snapshot: FileSnapshot): { index: number; lineN
   const actualAnchor = hashlineAnchorHash(snapshot.lines[index - 1], actualLine, snapshot.lines[index + 1], hashLength)
 
   if (actualHash !== parsed.hash || (parsed.anchor && actualAnchor !== parsed.anchor)) {
+    if (safeReapply) {
+      const candidates = findRefCandidates(parsed, snapshot, hashLength)
+      if (candidates.length === 1) {
+        return {
+          index: candidates[0].index,
+          lineNumber: candidates[0].lineNumber,
+        }
+      }
+
+      if (candidates.length > 1) {
+        const candidateLines = candidates.map((candidate) => candidate.lineNumber).join(", ")
+        throw new Error(
+          `Hash mismatch for line ${parsed.lineNumber}; found multiple relocation candidates (${candidateLines}). Read the file again.`,
+        )
+      }
+
+      throw new Error(`Hash mismatch for line ${parsed.lineNumber}; no relocation candidates found. Read the file again.`)
+    }
+
     const expectedRef = parsed.anchor
       ? `${parsed.lineNumber}#${parsed.hash}#${parsed.anchor}`
       : `${parsed.lineNumber}#${parsed.hash}`
@@ -218,7 +272,39 @@ function normalizeOperations(operations: HashlineOperation[]): HashlineOperation
   }))
 }
 
-function resolveChanges(snapshot: FileSnapshot, operations: HashlineOperation[]): ResolvedChange[] {
+function resolveRefRange(params: {
+  snapshot: FileSnapshot
+  ref?: string
+  startRef?: string
+  endRef?: string
+  safeReapply: boolean
+  label: string
+}): { start: { index: number; lineNumber: number }; end: { index: number; lineNumber: number } } {
+  if (params.ref && params.startRef) {
+    throw new Error(`${params.label} accepts either ref or startRef/endRef, not both`)
+  }
+
+  const baseStartRef = params.startRef ?? params.ref
+  if (!baseStartRef) {
+    throw new Error(`${params.label} requires ref or startRef`)
+  }
+
+  let start = resolveRef(baseStartRef, params.snapshot, params.safeReapply)
+  let end = params.endRef ? resolveRef(params.endRef, params.snapshot, params.safeReapply) : start
+
+  if (start.index > end.index) {
+    const first = start
+    start = end
+    end = first
+  }
+
+  return {
+    start,
+    end,
+  }
+}
+
+function resolveChanges(snapshot: FileSnapshot, operations: HashlineOperation[], safeReapply: boolean): ResolvedChange[] {
   if (operations.length === 0) {
     throw new Error("No operations provided")
   }
@@ -231,79 +317,106 @@ function resolveChanges(snapshot: FileSnapshot, operations: HashlineOperation[])
   return operations.map((op, order): ResolvedChange => {
     switch (op.op) {
       case "replace": {
-        if (!op.ref) {
-          throw new Error("replace requires ref")
-        }
         if (op.content === undefined) {
           throw new Error("replace requires content")
         }
 
-        const resolved = resolveRef(op.ref, snapshot)
+        const resolvedRange = resolveRefRange({
+          snapshot,
+          ref: op.ref,
+          startRef: op.startRef,
+          endRef: op.endRef,
+          safeReapply,
+          label: "replace",
+        })
         return {
           op: op.op,
-          spliceStart: resolved.index,
-          deleteCount: 1,
+          spliceStart: resolvedRange.start.index,
+          deleteCount: resolvedRange.end.index - resolvedRange.start.index + 1,
           insertLines: splitContentToLines(op.content),
           order,
-          anchorIndex: resolved.index,
-          label: `replace(${op.ref})`,
+          anchorIndex: resolvedRange.start.index,
+          label:
+            op.startRef || op.endRef
+              ? `replace(${op.startRef ?? op.ref}..${op.endRef ?? op.startRef ?? op.ref})`
+              : `replace(${op.ref})`,
         }
       }
 
       case "delete": {
-        if (!op.ref) {
-          throw new Error("delete requires ref")
-        }
-
-        const resolved = resolveRef(op.ref, snapshot)
+        const resolvedRange = resolveRefRange({
+          snapshot,
+          ref: op.ref,
+          startRef: op.startRef,
+          endRef: op.endRef,
+          safeReapply,
+          label: "delete",
+        })
         return {
           op: op.op,
-          spliceStart: resolved.index,
-          deleteCount: 1,
+          spliceStart: resolvedRange.start.index,
+          deleteCount: resolvedRange.end.index - resolvedRange.start.index + 1,
           insertLines: [],
           order,
-          anchorIndex: resolved.index,
-          label: `delete(${op.ref})`,
+          anchorIndex: resolvedRange.start.index,
+          label:
+            op.startRef || op.endRef
+              ? `delete(${op.startRef ?? op.ref}..${op.endRef ?? op.startRef ?? op.ref})`
+              : `delete(${op.ref})`,
         }
       }
 
       case "insert_before": {
-        if (!op.ref) {
-          throw new Error("insert_before requires ref")
-        }
         if (op.content === undefined) {
           throw new Error("insert_before requires content")
         }
 
-        const resolved = resolveRef(op.ref, snapshot)
+        const resolvedRange = resolveRefRange({
+          snapshot,
+          ref: op.ref,
+          startRef: op.startRef,
+          endRef: op.endRef,
+          safeReapply,
+          label: "insert_before",
+        })
         return {
           op: op.op,
-          spliceStart: resolved.index,
+          spliceStart: resolvedRange.start.index,
           deleteCount: 0,
           insertLines: splitContentToLines(op.content),
           order,
-          anchorIndex: resolved.index,
-          label: `insert_before(${op.ref})`,
+          anchorIndex: resolvedRange.start.index,
+          label:
+            op.startRef || op.endRef
+              ? `insert_before(${op.startRef ?? op.ref}..${op.endRef ?? op.startRef ?? op.ref})`
+              : `insert_before(${op.ref})`,
         }
       }
 
       case "insert_after": {
-        if (!op.ref) {
-          throw new Error("insert_after requires ref")
-        }
         if (op.content === undefined) {
           throw new Error("insert_after requires content")
         }
 
-        const resolved = resolveRef(op.ref, snapshot)
+        const resolvedRange = resolveRefRange({
+          snapshot,
+          ref: op.ref,
+          startRef: op.startRef,
+          endRef: op.endRef,
+          safeReapply,
+          label: "insert_after",
+        })
         return {
           op: op.op,
-          spliceStart: resolved.index + 1,
+          spliceStart: resolvedRange.end.index + 1,
           deleteCount: 0,
           insertLines: splitContentToLines(op.content),
           order,
-          anchorIndex: resolved.index,
-          label: `insert_after(${op.ref})`,
+          anchorIndex: resolvedRange.end.index,
+          label:
+            op.startRef || op.endRef
+              ? `insert_after(${op.startRef ?? op.ref}..${op.endRef ?? op.startRef ?? op.ref})`
+              : `insert_after(${op.ref})`,
         }
       }
 
@@ -315,8 +428,8 @@ function resolveChanges(snapshot: FileSnapshot, operations: HashlineOperation[])
           throw new Error("replace_range requires content")
         }
 
-        const start = resolveRef(op.startRef, snapshot)
-        const end = resolveRef(op.endRef, snapshot)
+        const start = resolveRef(op.startRef, snapshot, safeReapply)
+        const end = resolveRef(op.endRef, snapshot, safeReapply)
 
         if (start.index > end.index) {
           throw new Error("replace_range startRef must be on or before endRef")
@@ -514,6 +627,7 @@ export async function runHashlineOperations(params: {
   operations: HashlineOperation[]
   expectedFileHash?: string
   fileRev?: string
+  safeReapply?: boolean
   dryRun?: boolean
   context?: { directory?: string }
 }): Promise<string> {
@@ -539,7 +653,7 @@ export async function runHashlineOperations(params: {
     }
   }
 
-  const changes = resolveChanges(snapshot, normalizedOps)
+  const changes = resolveChanges(snapshot, normalizedOps, Boolean(params.safeReapply))
   validateChangeConflicts(changes)
 
   const applied = applyChanges(snapshot, changes)
