@@ -2,7 +2,7 @@ import path from "node:path"
 import { promises as fs, rmSync } from "node:fs"
 import { randomBytes } from "node:crypto"
 import { tmpdir } from "node:os"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import type { Hooks } from "@opencode-ai/plugin"
 import {
   buildHashlineSystemInstruction,
@@ -181,7 +181,7 @@ async function annotateChatMessageParts(
     }
 
     const tempPath = await writeAnnotatedTempFile(annotated)
-    part.url = `file://${tempPath}`
+    part.url = pathToFileURL(tempPath).href
     part.content = annotated
   }
 }
@@ -215,10 +215,10 @@ export function createHashlineHooks(config: HashlineRuntimeConfig, cache: Hashli
       }
 
       const source = output.output
+      const alreadyAnnotated = stripHashlinePrefixes(source, config.prefix) !== source
       if (
         source.includes("<hashline-file ") ||
-        source.includes("#HL REV:") ||
-        source.includes("#HL 1#") ||
+        alreadyAnnotated ||
         source.includes("# format: <line>#<hash>#<anchor>|<content>") ||
         source.includes("# format: <line>#<hash>|<content>")
       ) {

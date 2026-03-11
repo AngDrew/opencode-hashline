@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] - 2026-03-12
+
+### Changed
+
+- Standardized canonical tool argument names to camelCase across `read`, `edit`, `patch`, and `write` (`filePath`, `patchText`, `expectedFileHash`, `fileRev`, `dryRun`, `safeReapply`, `startRef`, `endRef`).
+- Updated routing normalization to map legacy snake_case inputs to camelCase for backward compatibility while keeping camelCase as canonical.
+- Updated README and benchmark examples to use camelCase argument names consistently.
+
+### Removed
+
+- Removed snake_case top-level argument fields from tool schemas.
+
 ## [0.3.0] - 2026-03-11
 
 ### Changed
 
-- Merged `hashline_edit` capability into `edit` via single-operation mode (`operation` + `start_ref`/`ref`, optional `end_ref`, `safe_reapply`).
+- Merged `hashline_edit` capability into `edit` via single-operation mode (`operation` + `startRef`, optional `endRef`, `safeReapply`).
 - Updated docs, routing normalization, and benchmark coverage to align with the unified `edit` interface.
 
 ### Removed

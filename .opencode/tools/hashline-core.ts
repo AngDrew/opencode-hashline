@@ -77,6 +77,16 @@ export function computeFileRev(raw: string): string {
   return hashText(normalized, 8)
 }
 
+export function firstNonEmptyString(...values: Array<string | undefined>): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.length > 0) {
+      return value
+    }
+  }
+
+  return undefined
+}
+
 export function parseRaw(raw: string): ParsedHashlineFile {
   const eol: "\n" | "\r\n" = raw.includes("\r\n") ? "\r\n" : "\n"
   const normalized = raw.replace(/\r\n/g, "\n")
@@ -756,7 +766,7 @@ export function parsePatchText(patchText: string): {
     parsed = JSON.parse(patchText)
   } catch {
     throw new Error(
-      "patch_text must be JSON for hashline patching. Use either an array of operations or an object { file_path, operations, expected_file_hash }.",
+      "patchText must be JSON for hashline patching. Use either an array of operations or an object { filePath, operations, expectedFileHash, fileRev }.",
     )
   }
 
@@ -768,19 +778,16 @@ export function parsePatchText(patchText: string): {
 
   if (parsed && typeof parsed === "object") {
     const obj = parsed as {
-      file_path?: string
       filePath?: string
       operations?: HashlineOperation[]
-      expected_file_hash?: string
       expectedFileHash?: string
-      file_rev?: string
       fileRev?: string
     }
     return {
-      filePath: obj.file_path ?? obj.filePath,
+      filePath: obj.filePath,
       operations: obj.operations,
-      expectedFileHash: obj.expected_file_hash ?? obj.expectedFileHash,
-      fileRev: obj.file_rev ?? obj.fileRev,
+      expectedFileHash: obj.expectedFileHash,
+      fileRev: obj.fileRev,
     }
   }
 
@@ -790,8 +797,8 @@ export function parsePatchText(patchText: string): {
 export type HashlineOperationInput = {
   op: HashlineOpName
   ref?: string
-  start_ref?: string
-  end_ref?: string
+  startRef?: string
+  endRef?: string
   content?: string
 }
 
@@ -799,8 +806,8 @@ export function mapOperationInput(input: HashlineOperationInput): HashlineOperat
   return {
     op: input.op,
     ref: input.ref,
-    startRef: input.start_ref,
-    endRef: input.end_ref,
+    startRef: input.startRef,
+    endRef: input.endRef,
     content: input.content,
   }
 }

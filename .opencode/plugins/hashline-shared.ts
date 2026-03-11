@@ -16,7 +16,7 @@ export interface HashlineRuntimeConfig {
 
 const CONFIG_FILENAME = "opencode-hashline.json"
 
-export const DEFAULT_PREFIX = "#HL "
+export const DEFAULT_PREFIX = ";;;"
 
 export const DEFAULT_EXCLUDE_PATTERNS: string[] = [
   "**/node_modules/**",
@@ -231,7 +231,7 @@ export function buildHashlineSystemInstruction(config: Pick<HashlineRuntimeConfi
     "## Hashline — Line Reference System",
     "",
     `Annotated lines use \`${prefix}<line>#<hash>#<anchor>|<content>\` (example: \`${prefix}12#A3F#9BC|const value = 1\`).`,
-    "Read output also includes `#HL REV:<hash>`; pass that value as `file_rev`/`fileRev` when editing.",
+    `Read output also includes \`${prefix}REV:<hash>\`; pass that value as \`file_rev\`/\`fileRev\` when editing.`,
     "",
     "### Read first (required before edits)",
     "```json",

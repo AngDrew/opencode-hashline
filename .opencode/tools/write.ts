@@ -6,45 +6,35 @@ export default tool({
   args: {
     filePath: tool.schema
       .string()
-      .optional()
-      .describe("Absolute or workspace-relative file path."),
-    file_path: tool.schema
-      .string()
-      .optional()
       .describe("Absolute or workspace-relative file path."),
     content: tool.schema
       .string()
       .describe("Full file content to write."),
-    expected_file_hash: tool.schema
+    expectedFileHash: tool.schema
       .string()
       .optional()
       .describe("Optional optimistic concurrency guard from read header file_hash."),
-    file_rev: tool.schema
+    fileRev: tool.schema
       .string()
       .optional()
       .describe("Optional file revision guard from read output '#HL REV:<hash>'."),
-    dry_run: tool.schema
+    dryRun: tool.schema
       .boolean()
       .optional()
       .describe("Validate and compute result without writing file."),
   },
   async execute(args, context) {
-    const filePath = args.filePath ?? args.file_path
-    if (!filePath) {
-      throw new Error("Missing file path. Provide filePath (preferred) or file_path.")
-    }
-
     return runHashlineOperations({
-      filePath,
+      filePath: args.filePath,
       operations: [
         {
           op: "set_file",
           content: args.content,
         },
       ],
-      expectedFileHash: args.expected_file_hash,
-      fileRev: args.file_rev,
-      dryRun: args.dry_run,
+      expectedFileHash: args.expectedFileHash,
+      fileRev: args.fileRev,
+      dryRun: args.dryRun,
       context,
     })
   },

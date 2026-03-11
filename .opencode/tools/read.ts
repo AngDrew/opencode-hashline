@@ -7,11 +7,6 @@ export default tool({
   args: {
     filePath: tool.schema
       .string()
-      .optional()
-      .describe("Absolute or workspace-relative file path to read."),
-    file_path: tool.schema
-      .string()
-      .optional()
       .describe("Absolute or workspace-relative file path to read."),
     offset: tool.schema
       .number()
@@ -27,13 +22,8 @@ export default tool({
       .describe("Maximum number of lines to return. Defaults to 2000."),
   },
   async execute(args, context) {
-    const filePath = args.filePath ?? args.file_path
-    if (!filePath) {
-      throw new Error("Missing file path. Provide filePath (preferred) or file_path.")
-    }
-
     return runHashlineRead({
-      filePath,
+      filePath: args.filePath,
       offset: args.offset,
       limit: args.limit,
       context,

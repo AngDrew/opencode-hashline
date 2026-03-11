@@ -4,6 +4,7 @@ import assert from "node:assert/strict"
 import { promises as fs } from "node:fs"
 import path from "node:path"
 import os from "node:os"
+import { pathToFileURL } from "node:url"
 
 import {
   computeFileRev as computeCoreFileRev,
@@ -35,7 +36,7 @@ async function loadSharedModule() {
   await fs.writeFile(path.join(pluginsDir, "hashline-shared.js"), patchedShared, "utf8")
   await fs.writeFile(path.join(tempDir, "package.json"), '{"type":"module"}', "utf8")
 
-  const moduleUrl = new URL(`file://${path.join(pluginsDir, "hashline-shared.js").replace(/\\/g, "/")}`)
+  const moduleUrl = pathToFileURL(path.join(pluginsDir, "hashline-shared.js"))
   const shared = await import(moduleUrl.href)
 
   return { tempDir, shared }
@@ -79,7 +80,7 @@ test("formatWithHashline and stripHashlinePrefixes round-trip basics", () => {
   const source = "one\ntwo\nthree"
 
   const formatted = formatWithHashline(source, { includeFileRev: true })
-  assert.match(formatted, /^#HL REV:[A-F0-9]{8}$/m)
+  assert.match(formatted, /^;;;REV:[A-F0-9]{8}$/m)
   assert.equal(stripHashlinePrefixes(formatted), source)
 
   const noPrefixFormatted = formatWithHashline(source, { prefix: false })

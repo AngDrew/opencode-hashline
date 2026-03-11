@@ -405,8 +405,8 @@ async function applyPatchJsonStrategy(workspace, filePath, fixture) {
     }
 
     const patchPayload = JSON.stringify({
-      file_path: filePath,
-      file_rev: context.fileRev,
+      filePath: filePath,
+      fileRev: context.fileRev,
       operations: [
         {
           op: "replace",
@@ -456,7 +456,7 @@ async function runPerformanceBenchmark() {
     const firstLine = readOutput.match(/^#HL\s+1#[A-Z0-9]+#[A-Z0-9]+\|(.*)$/m)?.[1] ?? "# Hashline toolset for OpenCode"
 
     if (readRev && firstRef) {
-      await timeAsync("runHashlineOperations(dry_run)", PERF_ITERATIONS, async () => {
+      await timeAsync("runHashlineOperations(dryRun)", PERF_ITERATIONS, async () => {
         await runHashlineOperations({
           filePath: "README.md",
           fileRev: readRev,
@@ -469,8 +469,8 @@ async function runPerformanceBenchmark() {
       timeSync("parsePatchText(payload)", PERF_ITERATIONS, () => {
         parsePatchText(
           JSON.stringify({
-            file_path: "README.md",
-            file_rev: readRev,
+            filePath: "README.md",
+            fileRev: readRev,
             operations: [{ op: "replace", ref: firstRef, content: firstLine }],
           }),
         )

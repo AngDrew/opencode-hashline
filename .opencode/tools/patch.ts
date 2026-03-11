@@ -8,53 +8,49 @@ import {
 
 export default tool({
   description:
-    "Hashline patch tool. Expects patch_text JSON containing hashline operations instead of textual diff matching.",
+    "Hashline patch tool. Expects patchText JSON containing hashline operations instead of textual diff matching.",
   args: {
-    patch_text: tool.schema
+    patchText: tool.schema
       .string()
       .describe(
-        "JSON string: either array of operations or object { file_path, operations, expected_file_hash, file_rev }."
+        "JSON string: either array of operations or object { filePath, operations, expectedFileHash, fileRev }."
       ),
     filePath: tool.schema
       .string()
       .optional()
-      .describe("Optional fallback file path when patch_text omits file_path."),
-    file_path: tool.schema
-      .string()
-      .optional()
-      .describe("Optional fallback file path when patch_text omits file_path."),
-    expected_file_hash: tool.schema
+      .describe("Optional fallback file path when patchText omits filePath."),
+    expectedFileHash: tool.schema
       .string()
       .optional()
       .describe("Optional fallback optimistic concurrency guard."),
-    file_rev: tool.schema
+    fileRev: tool.schema
       .string()
       .optional()
       .describe("Optional fallback file revision guard from read output '#HL REV:<hash>'."),
-    dry_run: tool.schema
+    dryRun: tool.schema
       .boolean()
       .optional()
       .describe("Validate patch without writing file."),
   },
   async execute(args, context) {
-    const parsed = parsePatchText(args.patch_text)
-    const filePath = parsed.filePath ?? args.filePath ?? args.file_path
+    const parsed = parsePatchText(args.patchText)
+    const filePath = parsed.filePath ?? args.filePath
 
     if (!filePath) {
-      throw new Error("Missing file path. Provide file_path in args or inside patch_text object.")
+      throw new Error("Missing file path. Provide filePath in args or inside patchText object.")
     }
 
     const operations = parsed.operations
     if (!operations || operations.length === 0) {
-      throw new Error("No operations found in patch_text")
+      throw new Error("No operations found in patchText")
     }
 
     return runHashlineOperations({
       filePath,
       operations: (operations as HashlineOperationInput[]).map(mapOperationInput),
-      expectedFileHash: parsed.expectedFileHash ?? args.expected_file_hash,
-      fileRev: parsed.fileRev ?? args.file_rev,
-      dryRun: args.dry_run,
+      expectedFileHash: parsed.expectedFileHash ?? args.expectedFileHash,
+      fileRev: parsed.fileRev ?? args.fileRev,
+      dryRun: args.dryRun,
       context,
     })
   },
