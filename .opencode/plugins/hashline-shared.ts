@@ -2,7 +2,8 @@ import { createHash } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
-import { computeFileRev, getAdaptiveHashLength, hashlineAnchorHash, hashlineLineHash } from "../tools/hashline-core"
+import { computeFileRev, getAdaptiveHashLength, hashlineAnchorHash, hashlineLineHash } from "../tools/hashline-core.js"
+export { computeFileRev }
 
 export interface HashlineRuntimeConfig {
   exclude: string[]
