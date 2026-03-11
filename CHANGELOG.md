@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.3] - 2026-03-12
+
+### Added
+
+- Added dynamic README badges for CI status, npm publish status, npm version, monthly downloads, and license.
+
+### Changed
+
+- Improved release visibility in README with live project health indicators.
+
 ## [1.0.2] - 2026-03-12
 
 ### Added
