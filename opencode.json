@@ -1,0 +1,22 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["hashline-routing"],
+  "agent": {
+    "hashline-test": {
+      "description": "Minimal smoke-test agent for hashline tool overrides",
+      "mode": "primary",
+      "model": "proxy/gpt-5.1-codex-mini",
+      "permission": {
+        "*": "deny",
+        "read": "allow",
+        "edit": "allow",
+        "patch": "allow",
+        "write": "allow",
+        "bash": "deny",
+        "glob": "deny",
+        "grep": "deny",
+        "list": "deny"
+      }
+    }
+  }
+}
