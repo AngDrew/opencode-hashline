@@ -39,6 +39,11 @@ jobs:
             exit 1
           fi
 
+      - name: Verify npm authentication
+        run: npm whoami
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Publish package to npm
         run: npm publish --provenance --access public
         env:

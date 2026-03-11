@@ -2,7 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.0.0] - 2026-03-12
+## [1.0.2] - 2026-03-12
+
+### Added
+
+- Added package metadata links (`repository`, `homepage`, `bugs`) required for npm provenance publishing.
+- Added explicit npm auth validation step (`npm whoami`) in publish workflow for clearer release failures.
+
+### Fixed
+
+- Fixed npm release pipeline reliability for tag-driven GitHub Actions publish.
 
 ## [1.0.1] - 2026-03-12
 
