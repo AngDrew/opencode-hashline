@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [1.0.0] - 2026-03-12
 
+## [1.0.1] - 2026-03-12
+
+### Added
+
+- Added automated npm publish workflow (`.github/workflows/publish.yml`) triggered by `v*` tags.
+- Added release-time version/tag validation before publishing to npm.
+
+### Changed
+
+- Updated release documentation for tag-driven npm deployment.
+- Added `publishConfig.access = "public"` to package metadata.
+
+## [1.0.0] - 2026-03-12
+
 ### Changed
 
 - Standardized canonical tool argument names to camelCase across `read`, `edit`, `patch`, and `write` (`filePath`, `patchText`, `expectedFileHash`, `fileRev`, `dryRun`, `safeReapply`, `startRef`, `endRef`).

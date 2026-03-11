@@ -177,6 +177,25 @@ Commands:
 
 GitHub Actions workflow (`.github/workflows/ci.yml`) runs install + build + tests on push and pull requests.
 
+## Auto publish to npm
+
+GitHub Actions workflow (`.github/workflows/publish.yml`) publishes to npm automatically when you push a version tag.
+
+Trigger:
+- Push tags matching `v*` (for example `v1.0.1`)
+
+Required environment secret (environment: `sikrit`):
+- `NPM_TOKEN`: npm access token with publish permissions for `@angdrew/opencode-hashline-plugin`
+
+Release flow:
+1. Update `package.json` version to the release version (without `v`, e.g. `1.0.1`)
+2. Commit and push changes
+3. Create and push tag with `v` prefix:
+   - `git tag -a v1.0.1 -m "Release v1.0.1"`
+   - `git push origin v1.0.1`
+
+The workflow validates that tag version and `package.json` version match, then runs `npm publish --provenance --access public`.
+
 ## Notes
 
 - Local Node sanity checks can fail for tool wrappers if `@opencode-ai/plugin` is not installed in the directory. These wrappers are intended for OpenCode runtime.
