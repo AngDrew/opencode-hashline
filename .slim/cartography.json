@@ -1,0 +1,42 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "last_run": "2026-03-11T16:57:02.620460Z",
+    "root": "D:\\projects\\ai\\hashline read edit",
+    "include_patterns": [
+      "src/**/*.ts",
+      "scripts/**/*.ts",
+      "scripts/**/*.js",
+      "*.json",
+      "*.ts",
+      "README.md"
+    ],
+    "exclude_patterns": [
+      "**/*.test.ts",
+      "**/*.spec.ts",
+      "test/**",
+      "tests/**",
+      "__tests__/**",
+      "docs/**",
+      "**/*.md",
+      "CHANGELOG.md",
+      "LICENSE",
+      "node_modules/**",
+      "dist/**",
+      "build/**",
+      "**/*.min.js"
+    ],
+    "exceptions": []
+  },
+  "file_hashes": {
+    "opencode.json": "1c7feee0ff797de3651523807b1ca2ca",
+    "package-lock.json": "75069655542ced89cd63c0882c13d24c",
+    "package.json": "e9b60a6d73389da958e057ecee185426",
+    "src\\index.ts": "599d838c6410c31ef12b0ee532a8c9fe",
+    "tsconfig.build.json": "74d76c6f67ead42df9c28cce8ba88e3c"
+  },
+  "folder_hashes": {
+    ".": "4a2aec19c74bee12bf042294c865b0f6",
+    "src": ""
+  }
+}
