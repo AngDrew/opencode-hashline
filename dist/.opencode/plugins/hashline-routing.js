@@ -1,3 +1,5 @@
+import { createHashlineHooks } from "./hashline-hooks";
+import { HashlineAnnotationCache, resolveHashlineConfig } from "./hashline-shared";
 const known = new Set(["read", "view", "edit", "patch", "write"]);
 function normalizeName(name) {
     return name === "view" ? "read" : name;
@@ -56,15 +58,26 @@ function normalizeArgs(toolName, args) {
     }
     return out;
 }
-export const HashlineRouting = async () => {
+export const HashlineRouting = async (input) => {
+    const projectDirectory = typeof input?.directory === "string" ? input.directory : undefined;
+    const config = resolveHashlineConfig(projectDirectory);
+    const cache = new HashlineAnnotationCache(config.cacheSize);
+    const hooks = createHashlineHooks(config, cache);
     return {
+        ...hooks,
         "tool.execute.before": async (input, output) => {
             const name = normalizeName(input.tool);
             if (!known.has(name)) {
+                if (hooks["tool.execute.before"]) {
+                    await hooks["tool.execute.before"](input, output);
+                }
                 return;
             }
             const nextArgs = normalizeArgs(name, (output.args ?? {}));
             output.args = nextArgs;
+            if (hooks["tool.execute.before"]) {
+                await hooks["tool.execute.before"](input, output);
+            }
         },
     };
 };

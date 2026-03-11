@@ -10,6 +10,7 @@
         "*": "deny",
         "read": "allow",
         "edit": "allow",
+        "hashline_edit": "allow",
         "patch": "allow",
         "write": "allow",
         "bash": "deny",
