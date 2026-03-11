@@ -19,6 +19,10 @@ export default tool({
       .string()
       .optional()
       .describe("Optional optimistic concurrency guard from read header file_hash."),
+    file_rev: tool.schema
+      .string()
+      .optional()
+      .describe("Optional file revision guard from read output '#HL REV:<hash>'."),
     dry_run: tool.schema
       .boolean()
       .optional()
@@ -39,6 +43,7 @@ export default tool({
         },
       ],
       expectedFileHash: args.expected_file_hash,
+      fileRev: args.file_rev,
       dryRun: args.dry_run,
       context,
     })

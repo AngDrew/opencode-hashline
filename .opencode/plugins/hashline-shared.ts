@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
-import { hashlineLineHash } from "../tools/hashline-core"
+import { computeFileRev, getAdaptiveHashLength, hashlineAnchorHash, hashlineLineHash } from "../tools/hashline-core"
 
 export interface HashlineRuntimeConfig {
   exclude: string[]
@@ -146,64 +146,19 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
-function globToRegex(pattern: string): RegExp {
-  const normalized = pattern.replace(/\\/g, "/")
-  let out = "^"
-
-  for (let i = 0; i < normalized.length; i += 1) {
-    const current = normalized[i]
-    const next = normalized[i + 1]
-
-    if (current === "*" && next === "*") {
-      out += ".*"
-      i += 1
-      continue
-    }
-
-    if (current === "*") {
-      out += "[^/]*"
-      continue
-    }
-
-    if (current === "?") {
-      out += "."
-      continue
-    }
-
-    out += escapeRegex(current)
-  }
-
-  out += "$"
-  return new RegExp(out)
-}
-
-const globRegexCache = new Map<string, RegExp>()
-
-function getGlobRegex(pattern: string): RegExp {
-  const cached = globRegexCache.get(pattern)
-  if (cached) {
-    return cached
-  }
-
-  const compiled = globToRegex(pattern)
-  globRegexCache.set(pattern, compiled)
-  return compiled
+function normalizeGlobPath(value: string): string {
+  return value.replace(/\\/g, "/")
 }
 
 export function shouldExclude(filePath: string, patterns: string[]): boolean {
-  const normalized = filePath.replace(/\\/g, "/")
-  return patterns.some((pattern) => getGlobRegex(pattern).test(normalized))
+  const normalizedPath = normalizeGlobPath(filePath)
+  return patterns.some((pattern) => path.matchesGlob(normalizedPath, normalizeGlobPath(pattern)))
 }
 
 const textEncoder = new TextEncoder()
 
 export function getByteLength(content: string): number {
   return textEncoder.encode(content).length
-}
-
-export function computeFileRev(content: string): string {
-  const normalized = content.includes("\r\n") ? content.replace(/\r\n/g, "\n") : content
-  return hashText(normalized, 8)
 }
 
 interface HashlineFormatOptions {
@@ -221,12 +176,25 @@ export function formatWithHashline(content: string, options?: HashlineFormatOpti
     output.push(`${effectivePrefix}REV:${computeFileRev(normalized)}`)
   }
 
+  const hashLength = getAdaptiveHashLength(lines.length)
   for (let idx = 0; idx < lines.length; idx += 1) {
     const line = lines[idx]
-    output.push(`${effectivePrefix}${idx + 1}#${hashlineLineHash(line)}|${line}`)
+    const lineHash = hashlineLineHash(line, hashLength)
+    const anchorHash = hashlineAnchorHash(lines[idx - 1], line, lines[idx + 1], hashLength)
+    output.push(`${effectivePrefix}${idx + 1}#${lineHash}#${anchorHash}|${line}`)
   }
 
   return output.join("\n")
+}
+
+export function formatWithRuntimeConfig(
+  content: string,
+  config: Pick<HashlineRuntimeConfig, "prefix" | "fileRev">,
+): string {
+  return formatWithHashline(content, {
+    prefix: config.prefix,
+    includeFileRev: config.fileRev,
+  })
 }
 
 export function stripHashlinePrefixes(content: string, prefix?: string | false): string {
@@ -235,7 +203,7 @@ export function stripHashlinePrefixes(content: string, prefix?: string | false):
   const lineEnding = content.includes("\r\n") ? "\r\n" : "\n"
   const normalized = lineEnding === "\r\n" ? content.replace(/\r\n/g, "\n") : content
 
-  const refPattern = new RegExp(`^([+\\- ])?${escapedPrefix}\\d+\\s*[#: ]\\s*[A-Za-z0-9]+\\|`)
+  const refPattern = new RegExp(`^([+\\- ])?${escapedPrefix}\\d+\\s*[#: ]\\s*[A-Za-z0-9]+(?:\\s*[#: ]\\s*[A-Za-z0-9]+)?\\|`)
   const revPattern = new RegExp(`^${escapedPrefix}REV:[A-Za-z0-9]{8}$`)
 
   const stripped = normalized
@@ -253,6 +221,62 @@ export function stripHashlinePrefixes(content: string, prefix?: string | false):
     .join("\n")
 
   return lineEnding === "\r\n" ? stripped.replace(/\n/g, "\r\n") : stripped
+}
+
+export function buildHashlineSystemInstruction(config: Pick<HashlineRuntimeConfig, "prefix">): string {
+  const prefix = config.prefix === false ? "" : config.prefix
+
+  return [
+    "## Hashline — Line Reference System",
+    "",
+    `Annotated lines use \`${prefix}<line>#<hash>#<anchor>|<content>\` (example: \`${prefix}12#A3F#9BC|const value = 1\`).`,
+    "Read output also includes `#HL REV:<hash>`; pass that value as `file_rev`/`fileRev` when editing.",
+    "",
+    "### Read first (required before edits)",
+    "```json",
+    '{ "file_path": "src/app.ts", "offset": 1, "limit": 200 }',
+    "```",
+    "Use refs exactly as returned, including the anchor hash.",
+    "",
+    "### Edit with operations[]",
+    "```json",
+    "{",
+    '  "file_path": "src/app.ts",',
+    '  "file_rev": "1A2B3C4D",',
+    '  "operations": [',
+    '    { "op": "replace", "ref": "12#A3F#9BC", "content": "const value = 2" },',
+    '    { "op": "insert_after", "ref": "12#A3F#9BC", "content": "console.log(value)" }',
+    "  ]",
+    "}",
+    "```",
+    "",
+    "### Patch with patch_text JSON",
+    "```json",
+    '{ "patch_text": "{\\"file_path\\":\\"src/app.ts\\",\\"file_rev\\":\\"1A2B3C4D\\",\\"operations\\":[{\\"op\\":\\"replace\\",\\"ref\\":\\"12#A3F#9BC\\",\\"content\\":\\"const value = 2\\"}]}" }',
+    "```",
+    "`patch_text` must be valid JSON (array or object).",
+    "",
+    "### Write full file content",
+    "```json",
+    '{ "file_path": "src/app.ts", "file_rev": "1A2B3C4D", "content": "full file contents" }',
+    "```",
+    "`write` replaces the entire file.",
+    "",
+    "### hashline_edit (single operation helper)",
+    "```json",
+    "{",
+    '  "path": "src/app.ts",',
+    '  "operation": "replace",',
+    '  "startRef": "12#A3F#9BC",',
+    '  "endRef": "14#B1C#4DE",',
+    '  "replacement": "const value = 3",',
+    '  "fileRev": "1A2B3C4D",',
+    '  "safeReapply": true',
+    "}",
+    "```",
+    "",
+    "After any successful edit/patch/write/hashline_edit, run read again before issuing new refs.",
+  ].join("\n")
 }
 
 interface CacheEntry {

@@ -4,7 +4,9 @@ import path from "node:path"
 
 const DEFAULT_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
-const LINE_HASH_LEN = 4
+const SMALL_FILE_HASH_LEN = 3
+const LARGE_FILE_HASH_LEN = 4
+const HASH_LENGTH_THRESHOLD = 4096
 
 export type HashlineOpName =
   | "replace"
@@ -31,6 +33,14 @@ interface FileSnapshot {
   fileHash: string
 }
 
+export interface ParsedHashlineFile {
+  raw: string
+  lines: string[]
+  eol: "\n" | "\r\n"
+  endsWithNewline: boolean
+  fileHash: string
+}
+
 interface ResolvedChange {
   op: HashlineOpName
   spliceStart: number
@@ -45,11 +55,29 @@ function hashText(text: string, length = 10): string {
   return createHash("sha1").update(text, "utf8").digest("hex").slice(0, length).toUpperCase()
 }
 
-export function hashlineLineHash(line: string): string {
-  return hashText(line, LINE_HASH_LEN)
+export function getAdaptiveHashLength(totalLines: number): number {
+  return totalLines > HASH_LENGTH_THRESHOLD ? LARGE_FILE_HASH_LEN : SMALL_FILE_HASH_LEN
 }
 
-function parseRaw(raw: string): Pick<FileSnapshot, "raw" | "lines" | "eol" | "endsWithNewline" | "fileHash"> {
+export function hashlineLineHash(line: string, length = LARGE_FILE_HASH_LEN): string {
+  return hashText(line, length)
+}
+
+export function hashlineAnchorHash(
+  previousLine: string | undefined,
+  line: string,
+  nextLine: string | undefined,
+  length = LARGE_FILE_HASH_LEN,
+): string {
+  return hashText(`${previousLine ?? ""}\u241E${line}\u241E${nextLine ?? ""}`, length)
+}
+
+export function computeFileRev(raw: string): string {
+  const normalized = raw.includes("\r\n") ? raw.replace(/\r\n/g, "\n") : raw
+  return hashText(normalized, 8)
+}
+
+export function parseRaw(raw: string): ParsedHashlineFile {
   const eol: "\n" | "\r\n" = raw.includes("\r\n") ? "\r\n" : "\n"
   const normalized = raw.replace(/\r\n/g, "\n")
   const endsWithNewline = normalized.endsWith("\n")
@@ -71,7 +99,7 @@ function parseRaw(raw: string): Pick<FileSnapshot, "raw" | "lines" | "eol" | "en
   }
 }
 
-function stringifyLines(lines: string[], eol: "\n" | "\r\n", endsWithNewline: boolean): string {
+export function stringifyLines(lines: string[], eol: "\n" | "\r\n", endsWithNewline: boolean): string {
   if (lines.length === 0) {
     return ""
   }
@@ -80,7 +108,7 @@ function stringifyLines(lines: string[], eol: "\n" | "\r\n", endsWithNewline: bo
   return endsWithNewline ? `${body}${eol}` : body
 }
 
-function splitContentToLines(content: string): string[] {
+export function splitContentToLines(content: string): string[] {
   const normalized = content.replace(/\r\n/g, "\n")
   const hasTrailingNewline = normalized.endsWith("\n")
   const parts = normalized.split("\n")
@@ -92,38 +120,49 @@ function splitContentToLines(content: string): string[] {
   return parts
 }
 
-function parseRef(ref: string): { lineNumber: number; hash: string } {
-  const match = ref.trim().match(/^(\d+)\s*[#: ]\s*([A-Za-z0-9]+)$/)
+export function parseLineRef(rawRef: string): { lineNumber: number; hash: string; anchor?: string } {
+  const text = rawRef.trim().replace(/^#HL\s+/i, "")
+  const beforePipe = text.split("|")[0].trim()
+  const match = beforePipe.match(/^(\d+)\s*[#: ]\s*([A-Za-z0-9]+)(?:\s*[#: ]\s*([A-Za-z0-9]+))?$/)
   if (!match) {
-    throw new Error(`Invalid line reference "${ref}". Expected format: <line>#<hash> (example: 22#A3F1)`)
+    throw new Error(
+      `Invalid line reference "${rawRef}". Expected format: <line>#<hash> or <line>#<hash>#<anchor> (example: 22#A3F or 22#A3F#9BC)`,
+    )
   }
 
   const lineNumber = Number.parseInt(match[1], 10)
   if (!Number.isFinite(lineNumber) || lineNumber < 1) {
-    throw new Error(`Invalid line number in reference "${ref}"`)
+    throw new Error(`Invalid line number in reference "${rawRef}"`)
   }
 
   return {
     lineNumber,
     hash: match[2].toUpperCase(),
+    anchor: match[3]?.toUpperCase(),
   }
 }
 
 function resolveRef(ref: string, snapshot: FileSnapshot): { index: number; lineNumber: number } {
-  const parsed = parseRef(ref)
+  const parsed = parseLineRef(ref)
   if (parsed.lineNumber > snapshot.lines.length) {
     throw new Error(
       `Reference ${ref} points to line ${parsed.lineNumber}, but file only has ${snapshot.lines.length} lines. Read the file again.`,
     )
   }
 
+  const hashLength = getAdaptiveHashLength(snapshot.lines.length)
   const index = parsed.lineNumber - 1
   const actualLine = snapshot.lines[index]
-  const actualHash = hashlineLineHash(actualLine)
+  const actualHash = hashlineLineHash(actualLine, hashLength)
+  const actualAnchor = hashlineAnchorHash(snapshot.lines[index - 1], actualLine, snapshot.lines[index + 1], hashLength)
 
-  if (actualHash !== parsed.hash) {
+  if (actualHash !== parsed.hash || (parsed.anchor && actualAnchor !== parsed.anchor)) {
+    const expectedRef = parsed.anchor
+      ? `${parsed.lineNumber}#${parsed.hash}#${parsed.anchor}`
+      : `${parsed.lineNumber}#${parsed.hash}`
+    const actualRef = `${parsed.lineNumber}#${actualHash}#${actualAnchor}`
     throw new Error(
-      `Hash mismatch for line ${parsed.lineNumber}. Expected ${parsed.hash}, actual ${actualHash}. Current ref is ${parsed.lineNumber}#${actualHash}. Read the file again.`,
+      `Hash mismatch for line ${parsed.lineNumber}. Expected ${expectedRef}, actual ${actualRef}. Read the file again.`,
     )
   }
 
@@ -436,13 +475,18 @@ export async function runHashlineRead(params: {
 
   const startIndex = startLine - 1
   const endIndex = Math.min(snapshot.lines.length, startIndex + limit)
+  const hashLength = getAdaptiveHashLength(snapshot.lines.length)
   const body: string[] = []
+
+  body.push(`#HL REV:${computeFileRev(snapshot.raw)}`)
 
   for (let idx = startIndex; idx < endIndex; idx += 1) {
     const line = snapshot.lines[idx]
     const displayLine = line.length > MAX_LINE_LENGTH ? `${line.slice(0, MAX_LINE_LENGTH)}…` : line
-    const ref = `${idx + 1}#${hashlineLineHash(line)}`
-    body.push(`${ref}|${displayLine}`)
+    const lineHash = hashlineLineHash(line, hashLength)
+    const anchorHash = hashlineAnchorHash(snapshot.lines[idx - 1], line, snapshot.lines[idx + 1], hashLength)
+    const ref = `${idx + 1}#${lineHash}#${anchorHash}`
+    body.push(`#HL ${ref}|${displayLine}`)
   }
 
   if (snapshot.lines.length === 0) {
@@ -458,7 +502,7 @@ export async function runHashlineRead(params: {
 
   return [
     `<hashline-file path="${absolutePath}" file_hash="${snapshot.fileHash}" total_lines="${snapshot.lines.length}" start_line="${startLine}" shown_until="${endIndex}">`,
-    "# format: <line>#<hash>|<content>",
+    "# format: <line>#<hash>#<anchor>|<content>",
     "# use refs exactly as shown in hashline edit/patch tools",
     ...body,
     "</hashline-file>",
@@ -469,6 +513,7 @@ export async function runHashlineOperations(params: {
   filePath: string
   operations: HashlineOperation[]
   expectedFileHash?: string
+  fileRev?: string
   dryRun?: boolean
   context?: { directory?: string }
 }): Promise<string> {
@@ -482,6 +527,16 @@ export async function runHashlineOperations(params: {
     throw new Error(
       `File hash mismatch for ${params.filePath}. Expected ${params.expectedFileHash.toUpperCase()}, actual ${snapshot.fileHash}. Read the file again before editing.`,
     )
+  }
+
+  if (params.fileRev) {
+    const expectedRev = params.fileRev.toUpperCase()
+    const actualRev = computeFileRev(snapshot.raw)
+    if (actualRev !== expectedRev) {
+      throw new Error(
+        `File revision mismatch for ${params.filePath}. Expected ${expectedRev}, actual ${actualRev}. Read the file again before editing.`,
+      )
+    }
   }
 
   const changes = resolveChanges(snapshot, normalizedOps)
@@ -511,6 +566,7 @@ export async function runLegacyEdit(params: {
   oldString?: string
   newString?: string
   expectedFileHash?: string
+  fileRev?: string
   dryRun?: boolean
   context?: { directory?: string }
 }): Promise<string> {
@@ -522,6 +578,16 @@ export async function runLegacyEdit(params: {
     throw new Error(
       `File hash mismatch for ${params.filePath}. Expected ${params.expectedFileHash.toUpperCase()}, actual ${snapshot.fileHash}. Read the file again before editing.`,
     )
+  }
+
+  if (params.fileRev) {
+    const expectedRev = params.fileRev.toUpperCase()
+    const actualRev = computeFileRev(snapshot.raw)
+    if (actualRev !== expectedRev) {
+      throw new Error(
+        `File revision mismatch for ${params.filePath}. Expected ${expectedRev}, actual ${actualRev}. Read the file again before editing.`,
+      )
+    }
   }
 
   const oldString = params.oldString ?? ""
@@ -569,6 +635,7 @@ export function parsePatchText(patchText: string): {
   filePath?: string
   operations?: HashlineOperation[]
   expectedFileHash?: string
+  fileRev?: string
 } {
   let parsed: unknown
   try {
@@ -592,11 +659,14 @@ export function parsePatchText(patchText: string): {
       operations?: HashlineOperation[]
       expected_file_hash?: string
       expectedFileHash?: string
+      file_rev?: string
+      fileRev?: string
     }
     return {
       filePath: obj.file_path ?? obj.filePath,
       operations: obj.operations,
       expectedFileHash: obj.expected_file_hash ?? obj.expectedFileHash,
+      fileRev: obj.file_rev ?? obj.fileRev,
     }
   }
 

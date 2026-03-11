@@ -39,6 +39,12 @@ function normalizeArgs(toolName: string, args: Record<string, unknown>): Record<
     if (typeof out.new_string === "string" && typeof out.newString !== "string") {
       out.newString = out.new_string
     }
+    if (typeof out.fileRev === "string" && typeof out.file_rev !== "string") {
+      out.file_rev = out.fileRev
+    }
+    if (typeof out.file_rev === "string" && typeof out.fileRev !== "string") {
+      out.fileRev = out.file_rev
+    }
   }
 
   if (toolName === "patch") {
@@ -54,6 +60,12 @@ function normalizeArgs(toolName: string, args: Record<string, unknown>): Record<
     if (typeof out.file_path === "string" && typeof out.filePath !== "string") {
       out.filePath = out.file_path
     }
+    if (typeof out.fileRev === "string" && typeof out.file_rev !== "string") {
+      out.file_rev = out.fileRev
+    }
+    if (typeof out.file_rev === "string" && typeof out.fileRev !== "string") {
+      out.fileRev = out.file_rev
+    }
   }
 
   if (toolName === "write") {
@@ -62,6 +74,12 @@ function normalizeArgs(toolName: string, args: Record<string, unknown>): Record<
     }
     if (typeof out.file_path === "string" && typeof out.filePath !== "string") {
       out.filePath = out.file_path
+    }
+    if (typeof out.fileRev === "string" && typeof out.file_rev !== "string") {
+      out.file_rev = out.fileRev
+    }
+    if (typeof out.file_rev === "string" && typeof out.fileRev !== "string") {
+      out.fileRev = out.file_rev
     }
   }
 

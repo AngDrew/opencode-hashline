@@ -1,8 +1,17 @@
 import { tool } from "@opencode-ai/plugin"
 import { promises as fs } from "node:fs"
 import path from "node:path"
-import { createHash } from "node:crypto"
-import { hashlineLineHash, resolveFilePath } from "./hashline-core"
+import {
+  computeFileRev,
+  getAdaptiveHashLength,
+  hashlineAnchorHash,
+  hashlineLineHash,
+  parseLineRef,
+  parseRaw,
+  resolveFilePath,
+  splitContentToLines,
+  stringifyLines,
+} from "./hashline-core"
 import { getByteLength, resolveHashlineConfig, shouldExclude } from "../plugins/hashline-shared"
 
 type HashlineEditOperation = "replace" | "delete" | "insert_before" | "insert_after"
@@ -60,92 +69,46 @@ class HashlineEditError extends Error {
   }
 }
 
-interface ParsedContent {
-  lines: string[]
-  eol: "\n" | "\r\n"
-  endsWithNewline: boolean
-}
-
-function parseFile(raw: string): ParsedContent {
-  const eol: "\n" | "\r\n" = raw.includes("\r\n") ? "\r\n" : "\n"
-  const normalized = raw.replace(/\r\n/g, "\n")
-  const endsWithNewline = normalized.endsWith("\n")
-
-  if (normalized.length === 0) {
-    return {
-      lines: [],
-      eol,
-      endsWithNewline,
-    }
-  }
-
-  const lines = normalized.split("\n")
-  if (endsWithNewline) {
-    lines.pop()
-  }
-
-  return {
-    lines,
-    eol,
-    endsWithNewline,
-  }
-}
-
-function stringifyFile(parsed: ParsedContent): string {
-  if (parsed.lines.length === 0) {
-    return ""
-  }
-
-  const body = parsed.lines.join(parsed.eol)
-  return parsed.endsWithNewline ? `${body}${parsed.eol}` : body
-}
-
-function splitReplacement(content: string): string[] {
-  const normalized = content.replace(/\r\n/g, "\n")
-  const endsWithNewline = normalized.endsWith("\n")
-  const parts = normalized.split("\n")
-  if (endsWithNewline) {
-    parts.pop()
-  }
-  return parts
-}
-
-function parseRef(rawRef: string): { lineNumber: number; hash: string } {
-  const text = rawRef.trim().replace(/^#HL\s+/i, "")
-  const beforePipe = text.split("|")[0].trim()
-  const match = beforePipe.match(/^(\d+)\s*[#: ]\s*([A-Za-z0-9]+)$/)
-
-  if (!match) {
-    throw new HashlineEditError("INVALID_REF", `Invalid hash reference: "${rawRef}"`)
-  }
-
-  const lineNumber = Number.parseInt(match[1], 10)
-  if (!Number.isFinite(lineNumber) || lineNumber < 1) {
-    throw new HashlineEditError("INVALID_REF", `Invalid line number in hash reference: "${rawRef}"`)
-  }
-
-  return {
-    lineNumber,
-    hash: match[2].toUpperCase(),
-  }
-}
-
-function findCandidates(expectedHash: string, lines: string[]): CandidateLine[] {
+function findCandidates(
+  expectedHash: string,
+  expectedAnchor: string | undefined,
+  lines: string[],
+  hashLength: number,
+): CandidateLine[] {
   const candidates: CandidateLine[] = []
   for (let idx = 0; idx < lines.length; idx += 1) {
-    if (hashlineLineHash(lines[idx]) === expectedHash) {
-      candidates.push({
-        lineNumber: idx + 1,
-        content: lines[idx],
-      })
+    if (hashlineLineHash(lines[idx], hashLength) !== expectedHash) {
+      continue
     }
+
+    if (expectedAnchor) {
+      const actualAnchor = hashlineAnchorHash(lines[idx - 1], lines[idx], lines[idx + 1], hashLength)
+      if (actualAnchor !== expectedAnchor) {
+        continue
+      }
+    }
+
+    candidates.push({
+      lineNumber: idx + 1,
+      content: lines[idx],
+    })
   }
 
   return candidates
 }
 
 function resolveLineRef(ref: string, lines: string[], safeReapply: boolean): { index: number; lineNumber: number } {
-  const parsed = parseRef(ref)
+  let parsed: { lineNumber: number; hash: string; anchor?: string }
+  try {
+    parsed = parseLineRef(ref)
+  } catch (error) {
+    throw new HashlineEditError(
+      "INVALID_REF",
+      error instanceof Error ? error.message : `Invalid hash reference: "${ref}"`,
+    )
+  }
+
+  const hashLength = getAdaptiveHashLength(lines.length)
 
   if (parsed.lineNumber > lines.length) {
     throw new HashlineEditError(
@@ -156,13 +119,15 @@ function resolveLineRef(ref: string, lines: string[], safeReapply: boolean): { i
   }
 
   const index = parsed.lineNumber - 1
-  const actualHash = hashlineLineHash(lines[index])
+  const actualHash = hashlineLineHash(lines[index], hashLength)
   if (actualHash === parsed.hash) {
     return {
       index,
       lineNumber: parsed.lineNumber,
     }
   }
+
+  const expectedAnchor = parsed.anchor
 
   if (!safeReapply) {
     throw new HashlineEditError(
@@ -176,7 +141,7 @@ function resolveLineRef(ref: string, lines: string[], safeReapply: boolean): { i
     )
   }
 
-  const candidates = findCandidates(parsed.hash, lines)
+  const candidates = findCandidates(parsed.hash, expectedAnchor, lines, hashLength)
   if (candidates.length === 1) {
     return {
       index: candidates[0].lineNumber - 1,
@@ -208,11 +173,6 @@ function resolveLineRef(ref: string, lines: string[], safeReapply: boolean): { i
   )
 }
 
-function computeFileRev(raw: string): string {
-  const normalized = raw.replace(/\r\n/g, "\n")
-  return createHash("sha1").update(normalized, "utf8").digest("hex").slice(0, 8).toUpperCase()
-}
-
 function requireReplacement(operation: HashlineEditOperation, replacement: string | undefined): string {
   if (replacement !== undefined) {
     return replacement
@@ -227,7 +187,7 @@ function requireReplacement(operation: HashlineEditOperation, replacement: strin
 
 export default tool({
   description:
-    "Edit files using hashline references. Resolves refs like 5:a3f or '#HL 5:a3f|...' and applies replace/delete/insert without old_string matching.",
+    "Edit files using hashline references. Resolves refs like 5#A3F#9BC or '#HL 5#A3F#9BC|...' and applies replace/delete/insert without old_string matching.",
   args: {
     path: tool.schema.string().describe("Absolute or workspace-relative file path."),
     operation: tool.schema
@@ -287,7 +247,7 @@ export default tool({
 
     try {
       const safeReapply = args.safeReapply ?? config.safeReapply
-      const parsed = parseFile(raw)
+      const parsed = parseRaw(raw)
 
       let start = resolveLineRef(args.startRef, parsed.lines, safeReapply)
       let end = args.endRef ? resolveLineRef(args.endRef, parsed.lines, safeReapply) : start
@@ -299,7 +259,7 @@ export default tool({
       }
 
       const replacement = requireReplacement(args.operation, args.replacement)
-      const replacementLines = splitReplacement(replacement)
+      const replacementLines = splitContentToLines(replacement)
 
       switch (args.operation) {
         case "replace": {
@@ -329,7 +289,7 @@ export default tool({
 
       startLine = start.lineNumber
       endLine = end.lineNumber
-      next = stringifyFile(parsed)
+      next = stringifyLines(parsed.lines, parsed.eol, parsed.endsWithNewline)
     } catch (error) {
       if (error instanceof HashlineEditError) {
         throw new Error(error.toDiagnostic())

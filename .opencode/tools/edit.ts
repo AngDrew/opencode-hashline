@@ -38,13 +38,17 @@ export default tool({
       .array(operationSchema)
       .optional()
       .describe(
-        "Preferred mode. Each operation uses hashline refs like 22#A3F1. Supported ops: replace, delete, insert_before, insert_after, replace_range, set_file.",
+        "Preferred mode. Each operation uses hashline refs like 22#A3F#9BC. Supported ops: replace, delete, insert_before, insert_after, replace_range, set_file."
       ),
 
     expected_file_hash: tool.schema
       .string()
       .optional()
       .describe("Optional optimistic concurrency guard from read header file_hash."),
+    file_rev: tool.schema
+      .string()
+      .optional()
+      .describe("Optional file revision guard from read output '#HL REV:<hash>'."),
 
     dry_run: tool.schema
       .boolean()
@@ -72,6 +76,7 @@ export default tool({
         filePath,
         operations: (args.operations as HashlineOperationInput[]).map(mapOperationInput),
         expectedFileHash: args.expected_file_hash,
+        fileRev: args.file_rev,
         dryRun: args.dry_run,
         context,
       })
@@ -82,6 +87,7 @@ export default tool({
       oldString: args.old_string,
       newString: args.new_string,
       expectedFileHash: args.expected_file_hash,
+      fileRev: args.file_rev,
       dryRun: args.dry_run,
       context,
     })

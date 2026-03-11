@@ -5,8 +5,9 @@ import { tmpdir } from "node:os"
 import { fileURLToPath } from "node:url"
 import type { Hooks } from "@opencode-ai/plugin"
 import {
+  buildHashlineSystemInstruction,
   extractPathFromToolArgs,
-  formatWithHashline,
+  formatWithRuntimeConfig,
   getByteLength,
   HashlineAnnotationCache,
   shouldExclude,
@@ -83,43 +84,6 @@ function stripNestedHashes(value: unknown, prefix: string | false): unknown {
   }
 
   return out
-}
-
-function addSystemInstruction(output: { system?: string[] }, config: HashlineRuntimeConfig): void {
-  if (!Array.isArray(output.system)) {
-    output.system = []
-  }
-
-  const prefix = config.prefix === false ? "" : config.prefix
-
-  output.system.push(
-    [
-      "## Hashline — Line Reference System",
-      "",
-      `File contents are annotated with hashline prefixes in the format \`${prefix}<line>:<hash>|<content>\`.`,
-      "Use refs exactly as shown in read output when editing.",
-      "",
-      "### Preferred edit path",
-      "- Use hash-aware operations (`edit` operations[] or `patch` patch_text JSON) with refs like `12#ABCD`.",
-      "- Optionally pass expected file hash (`expected_file_hash`) to guard against stale writes.",
-      "",
-      "### Dedicated hashline_edit tool",
-      "- Supports replace/delete/insert_before/insert_after with refs.",
-      "- Supports `fileRev` check from read output `#HL REV:<hash>`.",
-      "- Supports `safeReapply: true` for line relocation when unique.",
-      "",
-      "### Structured errors",
-      "- HASH_MISMATCH",
-      "- FILE_REV_MISMATCH",
-      "- AMBIGUOUS_REAPPLY",
-      "- TARGET_OUT_OF_RANGE",
-      "- INVALID_REF",
-      "- INVALID_RANGE",
-      "- MISSING_REPLACEMENT",
-      "",
-      "Re-read file before issuing new refs after any edit.",
-    ].join("\n"),
-  )
 }
 
 let tempDirPromise: Promise<string> | null = null
@@ -210,12 +174,7 @@ async function annotateChatMessageParts(
       : path.resolve(contextDirectory, absolutePath)
 
     const cached = cache.get(cacheKey, source)
-    const annotated =
-      cached ??
-      formatWithHashline(source, {
-        prefix: config.prefix,
-        includeFileRev: config.fileRev,
-      })
+    const annotated = cached ?? formatWithRuntimeConfig(source, config)
 
     if (!cached) {
       cache.set(cacheKey, source, annotated)
@@ -256,7 +215,13 @@ export function createHashlineHooks(config: HashlineRuntimeConfig, cache: Hashli
       }
 
       const source = output.output
-      if (source.includes("<hashline-file ") || source.includes("# format: <line>#<hash>|<content>")) {
+      if (
+        source.includes("<hashline-file ") ||
+        source.includes("#HL REV:") ||
+        source.includes("#HL 1#") ||
+        source.includes("# format: <line>#<hash>#<anchor>|<content>") ||
+        source.includes("# format: <line>#<hash>|<content>")
+      ) {
         return
       }
 
@@ -276,17 +241,18 @@ export function createHashlineHooks(config: HashlineRuntimeConfig, cache: Hashli
         return
       }
 
-      const annotated = formatWithHashline(source, {
-        prefix: config.prefix,
-        includeFileRev: config.fileRev,
-      })
+      const annotated = formatWithRuntimeConfig(source, config)
 
       cache.set(cacheKey, source, annotated)
       output.output = annotated
     },
 
     "experimental.chat.system.transform": async (_input, output) => {
-      addSystemInstruction(output as { system?: string[] }, config)
+      const target = output as { system?: string[] }
+      if (!Array.isArray(target.system)) {
+        target.system = []
+      }
+      target.system.push(buildHashlineSystemInstruction(config))
     },
 
     "chat.message": async (input, output) => {

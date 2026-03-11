@@ -17,6 +17,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "test": "node --test",
+    "bench": "node scripts/benchmark.mjs",
     "pack:check": "npm pack --dry-run",
     "prepublishOnly": "npm run build"
   },

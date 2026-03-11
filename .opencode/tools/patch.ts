@@ -13,7 +13,7 @@ export default tool({
     patch_text: tool.schema
       .string()
       .describe(
-        "JSON string: either array of operations or object { file_path, operations, expected_file_hash }.",
+        "JSON string: either array of operations or object { file_path, operations, expected_file_hash, file_rev }."
       ),
     filePath: tool.schema
       .string()
@@ -27,6 +27,10 @@ export default tool({
       .string()
       .optional()
       .describe("Optional fallback optimistic concurrency guard."),
+    file_rev: tool.schema
+      .string()
+      .optional()
+      .describe("Optional fallback file revision guard from read output '#HL REV:<hash>'."),
     dry_run: tool.schema
       .boolean()
       .optional()
@@ -49,6 +53,7 @@ export default tool({
       filePath,
       operations: (operations as HashlineOperationInput[]).map(mapOperationInput),
       expectedFileHash: parsed.expectedFileHash ?? args.expected_file_hash,
+      fileRev: parsed.fileRev ?? args.file_rev,
       dryRun: args.dry_run,
       context,
     })
