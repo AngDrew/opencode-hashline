@@ -8,7 +8,7 @@ import {
 
 export default tool({
   description:
-    "Hashline patch tool. Expects patchText JSON containing hashline operations instead of textual diff matching.",
+    "Hashline patch tool for hash-patch. Expects patchText JSON containing hashline operations instead of textual diff matching.",
   args: {
     patchText: tool.schema
       .string()

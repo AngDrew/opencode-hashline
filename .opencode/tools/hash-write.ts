@@ -2,7 +2,7 @@ import { tool } from "@opencode-ai/plugin"
 import { runHashlineOperations } from "./hashline-core"
 
 export default tool({
-  description: "Hashline-compatible full file writer implemented through set_file operation.",
+  description: "Hashline-compatible full file writer for hash-write implemented through set_file operation.",
   args: {
     filePath: tool.schema
       .string()

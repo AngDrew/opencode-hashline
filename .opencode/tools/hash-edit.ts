@@ -24,7 +24,7 @@ const singleOperationSchema = tool.schema.enum(["replace", "delete", "insert_bef
 
 export default tool({
   description:
-    "Hashline-aware edit tool. Use operations[] for batch edits or operation + startRef/ref for a single hashline edit.",
+    "Hashline-aware edit tool for hash-edit. Use operations[] for batch edits or operation + startRef/ref for a single hashline edit.",
   args: {
     filePath: tool.schema
       .string()

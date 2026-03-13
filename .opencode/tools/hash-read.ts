@@ -3,7 +3,7 @@ import { runHashlineRead } from "./hashline-core"
 
 export default tool({
   description:
-    "Hashline file reader. Returns line-stable refs in format <line>#<hash>#<anchor>|<content> to support precise edits.",
+    "Hashline file reader for hash-read. Returns line-stable refs in format <line>#<hash>#<anchor>|<content>.",
   args: {
     filePath: tool.schema
       .string()

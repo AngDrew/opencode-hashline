@@ -6,29 +6,29 @@
 [![npm downloads](https://img.shields.io/npm/dm/%40angdrew/opencode-hashline-plugin?logo=npm)](https://www.npmjs.com/package/%40angdrew/opencode-hashline-plugin)
 [![npm license](https://img.shields.io/npm/l/%40angdrew/opencode-hashline-plugin)](https://www.npmjs.com/package/%40angdrew/opencode-hashline-plugin)
 
-This repository provides hashline-based OpenCode tool overrides for stable, line-referenced file reads and edits.
+This repository provides a distinct hashline tool suite for OpenCode with stable, line-referenced file reads and edits.
 
 It is both:
 - a publishable OpenCode plugin package (`@angdrew/opencode-hashline-plugin`), and
 - a local `.opencode/` runtime implementation of tools/plugins.
 
-## What it replaces
+## Hashline tool names
 
-Drop-in overrides are provided for built-in tool names:
+This package exposes distinct tool names (no built-in collisions):
 
-- `read` (and `view` normalized to `read` via plugin)
-- `edit`
-- `patch`
-- `write`
+- `hash-read`
+- `hash-edit`
+- `hash-patch`
+- `hash-write`
 
-OpenCode loads tools from `.opencode/tools/` and allows collisions with built-in names; custom tools take precedence according to OpenCode runtime ordering.
+Use these names directly in agents/permissions so users can clearly see when hashline tooling is being used.
 
 ## Tools provided
 
-- `read`: returns hash-annotated output (`<prefix>REV:...` + `<prefix><line>#<hash>#<anchor>|...`; default prefix is `;;;`)
-- `edit`: supports both `operations[]` batch mode and single-operation mode (`operation` + `startRef`, optional `endRef`, `safeReapply`)
-- `patch`: accepts `patchText` as JSON payload (array of ops or object with file+ops)
-- `write`: full-file replacement through `set_file`
+- `hash-read`: returns hash-annotated output (`<prefix>REV:...` + `<prefix><line>#<hash>#<anchor>|...`; default prefix is `;;;`)
+- `hash-edit`: supports both `operations[]` batch mode and single-operation mode (`operation` + `startRef`, optional `endRef`, `safeReapply`)
+- `hash-patch`: accepts `patchText` as JSON payload (array of ops or object with file+ops)
+- `hash-write`: full-file replacement through `set_file`
 
 ## Files
 
@@ -37,19 +37,19 @@ OpenCode loads tools from `.opencode/tools/` and allows collisions with built-in
 
 ### OpenCode runtime implementation
 - `.opencode/tools/hashline-core.ts` — hashing, parsing, ref validation, file I/O, operation engine
-- `.opencode/tools/read.ts` — hashline reader
-- `.opencode/tools/edit.ts` — hashline operations (batch + single-operation modes)
-- `.opencode/tools/patch.ts` — patch bridge using JSON operation payloads
-- `.opencode/tools/write.ts` — full file replace through `set_file`
+- `.opencode/tools/hash-read.ts` — hashline reader
+- `.opencode/tools/hash-edit.ts` — hashline operations (batch + single-operation modes)
+- `.opencode/tools/hash-patch.ts` — patch bridge using JSON operation payloads
+- `.opencode/tools/hash-write.ts` — full file replace through `set_file`
 
-- `.opencode/plugins/hashline-routing.ts` — tool alias + argument normalization (`view -> read`)
+- `.opencode/plugins/hashline-routing.ts` — hashline tool argument normalization (`hash-*` tools)
 - `.opencode/plugins/hashline-hooks.ts` — read annotation, edit arg normalization/stripping, system instruction injection, chat file-part annotation
 - `.opencode/plugins/hashline-shared.ts` — shared config, formatting, cache, exclusion handling, runtime helpers
-- `opencode.json` — registers plugin `hashline-routing` and includes sample `hashline-test` agent
+- `opencode.json` — registers plugin `@angdrew/opencode-hashline-plugin` and includes sample `hashline-test` agent
 
 ## Read output contract
 
-`read` returns text in this shape:
+`hash-read` returns text in this shape:
 
 ```text
 <hashline-file path="..." file_hash="..." total_lines="..." start_line="..." shown_until="...">
@@ -64,7 +64,7 @@ References remain valid while referenced line content is unchanged.
 
 ## Edit operation contract
 
-Batch `edit` mode:
+Batch `hash-edit` mode:
 
 ```json
 {
@@ -87,7 +87,7 @@ Supported ops:
 - `replace_range` (`startRef` + `endRef`)
 - `set_file`
 
-Single-operation `edit` mode:
+Single-operation `hash-edit` mode:
 
 ```json
 {
@@ -107,19 +107,19 @@ Notes:
 - `endRef` is optional; when present, operations apply across the range
 - `replacement` (or `content`) is required for `replace`, `insert_before`, and `insert_after`
 - `safeReapply` can be used in both batch and single-operation modes
-- Legacy snake_case aliases are accepted only via routing compatibility; they are not canonical.
+- snake_case aliases are accepted via routing compatibility; canonical parameters are camelCase.
 
 ### Migration notes
 
-- `hashline_edit` has been merged into `edit` single-operation mode.
-- Legacy `old_string` / `new_string` in `edit` has been removed.
-- Use hashline refs from `read` output and call `edit` with either:
+- `hashline_edit` has been merged into `hash-edit` single-operation mode.
+- Legacy `old_string` / `new_string` in `hash-edit` has been removed.
+- Use hashline refs from `hash-read` output and call `hash-edit` with either:
   - `operations[]` (batch), or
   - `operation` + `startRef` (+ optional `endRef`).
 
 ## Patch contract
 
-`patch` expects `patchText` as JSON (not unified diff). It supports:
+`hash-patch` expects `patchText` as JSON (not unified diff). It supports:
 
 1) an array of operations, or
 2) an object with `{ filePath, operations, expectedFileHash, fileRev }`
@@ -146,7 +146,7 @@ Supported keys:
 - `cacheSize` (`number`) — annotation cache entry count
 - `prefix` (`string | false`) — default `";;;"`; set `false` for no prefix
 - `fileRev` (`boolean`) — include `<prefix>REV:<hash>` in annotated output
-- `safeReapply` (`boolean`) — default behavior for `edit` safe-reapply handling
+- `safeReapply` (`boolean`) — default behavior for `hash-edit` safe-reapply handling
 
 Default values:
 

@@ -3,7 +3,7 @@
 ## Responsibility
 
 - Provides the **OpenCode plugin entrypoint** for this repository.
-- Exposes the **Hashline tool suite** (line-stable file operations) to the OpenCode runtime via `tool.read`, `tool.edit`, `tool.patch`, and `tool.write`.
+- Exposes the **Hashline tool suite** (line-stable file operations) to the OpenCode runtime via `tool["hash-read"]`, `tool["hash-edit"]`, `tool["hash-patch"]`, and `tool["hash-write"]`.
 - Composes routing/dispatch behavior from `HashlineRouting` so tool calls are routed consistently.
 
 Primary module:
@@ -18,10 +18,10 @@ Primary module:
     - a `tool` map with concrete tool handlers.
 
 - **Tool registration** (wiring only, implementations live outside `src/`):
-  - `readTool` imported from `../.opencode/tools/read`
-  - `editTool` imported from `../.opencode/tools/edit`
-  - `patchTool` imported from `../.opencode/tools/patch`
-  - `writeTool` imported from `../.opencode/tools/write`
+  - `hashReadTool` imported from `../.opencode/tools/hash-read`
+  - `hashEditTool` imported from `../.opencode/tools/hash-edit`
+  - `hashPatchTool` imported from `../.opencode/tools/hash-patch`
+  - `hashWriteTool` imported from `../.opencode/tools/hash-write`
 
 - **Routing composition**:
   - `HashlineRouting` is imported from `../.opencode/plugins/hashline-routing` as `routingPlugin`.
@@ -35,14 +35,14 @@ Overall, `src/` is intentionally minimal: it is the **assembly layer** that bind
 2. `hashlinePlugin` awaits routing initialization:
    - `const routingHooks = await routingPlugin(input)`
 3. `hashlinePlugin` returns the plugin contract:
-   - `return { ...routingHooks, tool: { read, edit, patch, write } }`
+   - `return { ...routingHooks, tool: { "hash-read": hashReadTool, "hash-edit": hashEditTool, "hash-patch": hashPatchTool, "hash-write": hashWriteTool } }`
 4. At runtime, OpenCode invokes tools via `tool.<name>`; routing hooks (from `HashlineRouting`) participate in dispatch as provided by `routingHooks`.
 
 ## Integration
 
 - **External runtime contract**: `@opencode-ai/plugin` (`Plugin` type) defines the expected shape/behavior of the exported plugin factory.
 - **Routing integration**: `../.opencode/plugins/hashline-routing` provides `HashlineRouting` (imported as `routingPlugin`) whose returned hooks are merged into the exported plugin.
-- **Tool integration**: `../.opencode/tools/{read,edit,patch,write}` supply the concrete tool handlers registered under `tool`.
+- **Tool integration**: `../.opencode/tools/{hash-read,hash-edit,hash-patch,hash-write}` supply the concrete tool handlers registered under `tool`.
 
 Entry point used by the host:
 - `src/index.ts` (default export: `hashlinePlugin`).

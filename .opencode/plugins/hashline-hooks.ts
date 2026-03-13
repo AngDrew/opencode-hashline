@@ -15,8 +15,8 @@ import {
   type HashlineRuntimeConfig,
 } from "./hashline-shared"
 
-const FILE_READ_TOOLS = ["read", "file_read", "read_file", "cat", "view"]
-const FILE_EDIT_TOOLS = ["edit", "write", "patch", "apply_patch", "file_edit", "file_write", "edit_file", "multiedit", "batch"]
+const FILE_READ_TOOLS = ["hash-read"]
+const FILE_EDIT_TOOLS = ["hash-edit", "hash-write", "hash-patch"]
 
 function toolEndsWith(tool: string, known: string[]): boolean {
   const lower = tool.toLowerCase()
@@ -201,7 +201,19 @@ export function createHashlineHooks(config: HashlineRuntimeConfig, cache: Hashli
       }
 
       const args = (output.args ?? {}) as Record<string, unknown>
-      output.args = stripNestedHashes(args, config.prefix) as Record<string, unknown>
+      const stripped = stripNestedHashes(args, config.prefix)
+      if (!stripped || typeof stripped !== "object" || Array.isArray(stripped)) {
+        return
+      }
+
+      const strippedArgs = stripped as Record<string, unknown>
+      for (const key of Object.keys(args)) {
+        delete args[key]
+      }
+
+      for (const [key, value] of Object.entries(strippedArgs)) {
+        args[key] = value
+      }
     },
 
     "tool.execute.after": async (input, output) => {
