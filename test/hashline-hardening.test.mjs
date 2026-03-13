@@ -188,3 +188,46 @@ test("fileRev accepts either #HL REV token (8) or file_hash token (10)", async (
     await fs.rm(tempDir, { recursive: true, force: true })
   }
 })
+
+test("replace accepts equivalent ref + startRef/endRef payloads", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-ref-compat-"))
+  const filePath = path.join(tempDir, "sample.txt")
+
+  try {
+    const original = "alpha\nbeta\ngamma\n"
+    await fs.writeFile(filePath, original, "utf8")
+
+    const readText = await runHashlineRead({
+      filePath,
+      offset: 1,
+      limit: 200,
+      context: { directory: PROJECT_ROOT },
+    })
+
+    const line2Ref = (() => {
+      const match = String(readText).match(/#HL\s+2#([A-F0-9]{3,4})#([A-F0-9]{3,4})\|beta/m)
+      return match ? `2#${match[1]}#${match[2]}` : undefined
+    })()
+
+    assert.equal(typeof line2Ref, "string")
+
+    await runHashlineOperations({
+      filePath,
+      operations: [
+        {
+          op: "replace",
+          ref: line2Ref,
+          startRef: line2Ref,
+          endRef: line2Ref,
+          content: "beta updated",
+        },
+      ],
+      context: { directory: PROJECT_ROOT },
+    })
+
+    const after = await fs.readFile(filePath, "utf8")
+    assert.equal(after, "alpha\nbeta updated\ngamma\n")
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true })
+  }
+})

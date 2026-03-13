@@ -308,6 +308,27 @@ function normalizeOperations(operations: HashlineOperation[]): HashlineOperation
   }))
 }
 
+function areEquivalentRefs(a: string, b: string): boolean {
+  try {
+    const parsedA = parseLineRef(a)
+    const parsedB = parseLineRef(b)
+
+    if (parsedA.lineNumber !== parsedB.lineNumber || parsedA.hash !== parsedB.hash) {
+      return false
+    }
+
+    // If both include anchors, they must also match. If only one side has an
+    // anchor, treat them as equivalent (same line/hash target).
+    if (parsedA.anchor && parsedB.anchor && parsedA.anchor !== parsedB.anchor) {
+      return false
+    }
+
+    return true
+  } catch {
+    return a.trim() === b.trim()
+  }
+}
+
 function resolveRefRange(params: {
   snapshot: FileSnapshot
   ref?: string
@@ -316,17 +337,21 @@ function resolveRefRange(params: {
   safeReapply: boolean
   label: string
 }): { start: { index: number; lineNumber: number }; end: { index: number; lineNumber: number } } {
-  if (params.ref && params.startRef) {
+  const ref = params.ref?.trim()
+  const startRef = params.startRef?.trim()
+  const endRef = params.endRef?.trim()
+
+  if (ref && startRef && !areEquivalentRefs(ref, startRef)) {
     throw new Error(`${params.label} accepts either ref or startRef/endRef, not both`)
   }
 
-  const baseStartRef = params.startRef ?? params.ref
+  const baseStartRef = startRef ?? ref
   if (!baseStartRef) {
     throw new Error(`${params.label} requires ref or startRef`)
   }
 
   let start = resolveRef(baseStartRef, params.snapshot, params.safeReapply)
-  let end = params.endRef ? resolveRef(params.endRef, params.snapshot, params.safeReapply) : start
+  let end = endRef ? resolveRef(endRef, params.snapshot, params.safeReapply) : start
 
   if (start.index > end.index) {
     const first = start

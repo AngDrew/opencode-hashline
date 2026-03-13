@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.2] - 2026-03-14
+
+### Fixed
+
+- Resolved `hash-edit` compatibility failure for `replace` when clients send both `ref` and `startRef/endRef` with equivalent targets.
+- Normalized ref-range resolution to accept equivalent duplicate refs while still rejecting conflicting dual-target payloads.
+
+### Added
+
+- Added regression coverage for equivalent `ref` + `startRef/endRef` replace payloads.
+
 ## [1.1.1] - 2026-03-14
 
 ### Changed
