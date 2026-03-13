@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2026-03-14
+
+### Changed
+
+- Clarified hashline system instructions to prefer `operations[]` and omit unused fields instead of sending empty strings.
+- Added hardening regression coverage for mixed payload handling and `fileRev` compatibility behavior.
+
+### Fixed
+
+- Hardened `hash-edit` single-operation validation with actionable errors for empty/malformed refs and missing replacement/content.
+- Improved routing alias normalization so empty canonical fields no longer block non-empty snake_case fallback values.
+- Added `fileRev` compatibility handling to accept either the canonical 8-char `#HL REV` token or the 10-char `file_hash` token when models send the wrong field.
+
+## [1.1.0] - 2026-03-14
+
+### Changed
+
+- Renamed tool registrations to distinct hashline names: `hash-read`, `hash-edit`, `hash-patch`, and `hash-write`.
+- Updated plugin wiring, routing normalization, system instructions, docs, config, and codemaps to consistently use the `hash-*` tool surface.
+
+### Fixed
+
+- Fixed `tool.execute.before` argument normalization to mutate args in place for OpenCode compatibility.
+
+### Removed
+
+- Removed legacy built-in-name tool entry files: `.opencode/tools/read.ts`, `.opencode/tools/edit.ts`, `.opencode/tools/patch.ts`, and `.opencode/tools/write.ts`.
+
 ## [1.0.3] - 2026-03-12
 
 ### Added

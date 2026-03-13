@@ -13,7 +13,8 @@ function canonicalToolName(name: string): string {
 function setStringAlias(args: Record<string, unknown>, canonicalKey: string, aliasKey: string): void {
   const canonical = args[canonicalKey]
   const alias = args[aliasKey]
-  if (typeof alias === "string" && typeof canonical !== "string") {
+  const canonicalMissing = typeof canonical !== "string" || canonical.trim().length === 0
+  if (typeof alias === "string" && alias.trim().length > 0 && canonicalMissing) {
     args[canonicalKey] = alias
   }
 }

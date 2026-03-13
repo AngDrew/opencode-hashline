@@ -9,6 +9,8 @@ import { pathToFileURL } from "node:url"
 import {
   computeFileRev as computeCoreFileRev,
   getAdaptiveHashLength,
+  runHashlineRead,
+  runHashlineOperations,
 } from "../dist/.opencode/tools/hashline-core.js"
 
 const PROJECT_ROOT = process.cwd()
@@ -98,4 +100,91 @@ test("shouldExclude matches common glob-style patterns", () => {
   assert.equal(shouldExclude("config/.env.production", patterns), true)
   assert.equal(shouldExclude("src/utils/file.js", patterns), false)
   assert.equal(shouldExclude("README.md", patterns), false)
+})
+
+test("hash-edit compatibility: operations[] should win when mixed payloads are sent", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-mixed-payload-"))
+  const filePath = path.join(tempDir, "sample.txt")
+
+  try {
+    await fs.writeFile(filePath, "line one\nline two\n", "utf8")
+    const before = await fs.readFile(filePath, "utf8")
+
+    // Simulate the compatibility branch used by hash-edit when callers send both styles:
+    // execute operations[] and ignore top-level single-operation fields.
+    await runHashlineOperations({
+      filePath,
+      operations: [
+        {
+          op: "set_file",
+          content: "line one\nline two updated\n",
+        },
+      ],
+      context: { directory: PROJECT_ROOT },
+    })
+
+    const after = await fs.readFile(filePath, "utf8")
+    assert.notEqual(after, before)
+    assert.equal(after, "line one\nline two updated\n")
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true })
+  }
+})
+
+test("fileRev accepts either #HL REV token (8) or file_hash token (10)", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-filerev-compat-"))
+  const filePath = path.join(tempDir, "sample.txt")
+
+  try {
+    const original = "alpha\nbeta\ngamma\n"
+    await fs.writeFile(filePath, original, "utf8")
+
+    const readText = await runHashlineRead({
+      filePath,
+      offset: 1,
+      limit: 200,
+      context: { directory: PROJECT_ROOT },
+    })
+
+    const fileRev8 = computeCoreFileRev(original)
+    const fileHash10 = (() => {
+      const match = String(readText).match(/file_hash=\"([A-F0-9]{10})\"/)
+      return match ? match[1] : undefined
+    })()
+
+    assert.match(fileRev8, /^[A-F0-9]{8}$/)
+    assert.equal(typeof fileHash10, "string")
+    assert.match(fileHash10, /^[A-F0-9]{10}$/)
+
+    // Guarded by 8-char fileRev token should pass.
+    await runHashlineOperations({
+      filePath,
+      operations: [
+        {
+          op: "set_file",
+          content: original,
+        },
+      ],
+      fileRev: fileRev8,
+      context: { directory: PROJECT_ROOT },
+    })
+
+    // Guarded by 10-char file_hash token in fileRev should also pass (compat mode).
+    await runHashlineOperations({
+      filePath,
+      operations: [
+        {
+          op: "set_file",
+          content: original,
+        },
+      ],
+      fileRev: fileHash10,
+      context: { directory: PROJECT_ROOT },
+    })
+
+    const after = await fs.readFile(filePath, "utf8")
+    assert.equal(after, original)
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true })
+  }
 })

@@ -77,6 +77,32 @@ export function computeFileRev(raw: string): string {
   return hashText(normalized, 8)
 }
 
+function assertFileRevisionMatches(snapshot: FileSnapshot, filePath: string, providedFileRev?: string): void {
+  if (typeof providedFileRev !== "string") {
+    return
+  }
+
+  const expectedToken = providedFileRev.trim().toUpperCase()
+  if (expectedToken.length === 0) {
+    return
+  }
+
+  const actualRev = computeFileRev(snapshot.raw)
+  if (expectedToken === actualRev) {
+    return
+  }
+
+  // Compatibility hardening for smaller models: they sometimes pass `file_hash`
+  // (10 chars from the <hashline-file ... file_hash="..."> header) into `fileRev`.
+  if (expectedToken === snapshot.fileHash) {
+    return
+  }
+
+  throw new Error(
+    `File revision mismatch for ${filePath}. Expected ${expectedToken}, actual ${actualRev}. Read the file again before editing.`,
+  )
+}
+
 export function firstNonEmptyString(...values: Array<string | undefined>): string | undefined {
   for (const value of values) {
     if (typeof value === "string" && value.length > 0) {
@@ -653,15 +679,7 @@ export async function runHashlineOperations(params: {
     )
   }
 
-  if (params.fileRev) {
-    const expectedRev = params.fileRev.toUpperCase()
-    const actualRev = computeFileRev(snapshot.raw)
-    if (actualRev !== expectedRev) {
-      throw new Error(
-        `File revision mismatch for ${params.filePath}. Expected ${expectedRev}, actual ${actualRev}. Read the file again before editing.`,
-      )
-    }
-  }
+  assertFileRevisionMatches(snapshot, params.filePath, params.fileRev)
 
   const changes = resolveChanges(snapshot, normalizedOps, Boolean(params.safeReapply))
   validateChangeConflicts(changes)
@@ -704,15 +722,7 @@ export async function runLegacyEdit(params: {
     )
   }
 
-  if (params.fileRev) {
-    const expectedRev = params.fileRev.toUpperCase()
-    const actualRev = computeFileRev(snapshot.raw)
-    if (actualRev !== expectedRev) {
-      throw new Error(
-        `File revision mismatch for ${params.filePath}. Expected ${expectedRev}, actual ${actualRev}. Read the file again before editing.`,
-      )
-    }
-  }
+  assertFileRevisionMatches(snapshot, params.filePath, params.fileRev)
 
   const oldString = params.oldString ?? ""
   const newString = params.newString ?? ""

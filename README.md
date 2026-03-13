@@ -108,6 +108,8 @@ Notes:
 - `replacement` (or `content`) is required for `replace`, `insert_before`, and `insert_after`
 - `safeReapply` can be used in both batch and single-operation modes
 - snake_case aliases are accepted via routing compatibility; canonical parameters are camelCase.
+- If both payload styles are present in one call (`operations[]` and top-level `operation/startRef/ref`), `hash-edit` executes `operations[]` and ignores top-level single-operation fields.
+- Empty strings are treated as missing values in single-operation mode. `startRef/ref` must be a valid hashline ref (for example `12#A3F#9BC`).
 
 ### Migration notes
 
