@@ -12,7 +12,7 @@ const targetSchema = tool.schema.object({
 
 export default tool({
   description:
-    "Hashline preflight checker for low-token validation before hash-edit/hash-patch/hash-write. Verifies guards and refs without writing.",
+    "Hashline preflight checker for low-token validation before edit/patch/write. Verifies guards and refs without writing.",
   args: {
     filePath: tool.schema
       .string()

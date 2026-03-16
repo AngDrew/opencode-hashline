@@ -3,15 +3,16 @@
   "plugin": ["@angdrew/opencode-hashline-plugin"],
   "agent": {
     "hashline-test": {
-      "description": "Minimal smoke-test agent for hashline hash-* tools",
+      "description": "Minimal smoke-test agent for hashline-backed read/edit/patch/write tools",
       "mode": "primary",
       "model": "proxy/gpt-5.1-codex-mini",
       "permission": {
         "*": "deny",
-        "hash-read": "allow",
-        "hash-edit": "allow",
-        "hash-patch": "allow",
-        "hash-write": "allow",
+        "read": "allow",
+        "hash-check": "allow",
+        "edit": "allow",
+        "patch": "allow",
+        "write": "allow",
         "bash": "deny",
         "glob": "deny",
         "grep": "deny",

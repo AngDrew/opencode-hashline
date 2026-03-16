@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-03-17
+
+### Changed
+
+- Reverted the primary tool surface to built-in names (`read`, `edit`, `patch`, `write`) while keeping `hash-check` as the custom preflight tool so OpenCode shows native diff UI behavior.
+- Updated routing, permissions, docs, smoke tests, and regression coverage to follow the built-in-surface naming and keep hashline semantics behind the same tool names as native.
+- Clarified across docs and test fixtures that the renamed `patch` tool still expects hashline JSON operations in `patchText`, not unified diff input.
+- Removed default-exported `hash-read`, `hash-edit`, `hash-patch`, and `hash-write` tool modules so runtime discovery exposes only built-in-surface `read`, `edit`, `patch`, and `write` (plus `hash-check`).
 ## [1.2.0] - 2026-03-16
 
 ### Added

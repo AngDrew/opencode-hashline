@@ -15,8 +15,8 @@ import {
   type HashlineRuntimeConfig,
 } from "./hashline-shared"
 
-const FILE_READ_TOOLS = ["hash-read"]
-const FILE_EDIT_TOOLS = ["hash-edit", "hash-write", "hash-patch", "hash-check"]
+const FILE_READ_TOOLS = ["read"]
+const FILE_EDIT_TOOLS = ["edit", "write", "patch", "hash-check"]
 
 function toolEndsWith(tool: string, known: string[]): boolean {
   const lower = tool.toLowerCase()

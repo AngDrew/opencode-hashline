@@ -1,9 +1,9 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import { HashlineRouting as routingPlugin } from "../.opencode/plugins/hashline-routing"
-import hashReadTool from "../.opencode/tools/hash-read"
-import hashEditTool from "../.opencode/tools/hash-edit"
-import hashPatchTool from "../.opencode/tools/hash-patch"
-import hashWriteTool from "../.opencode/tools/hash-write"
+import readTool from "../.opencode/tools/read"
+import editTool from "../.opencode/tools/edit"
+import patchTool from "../.opencode/tools/patch"
+import writeTool from "../.opencode/tools/write"
 import hashCheckTool from "../.opencode/tools/hash-check"
 
 const hashlinePlugin: Plugin = async (input) => {
@@ -12,12 +12,12 @@ const hashlinePlugin: Plugin = async (input) => {
   return {
     ...routingHooks,
     tool: {
-      "hash-read": hashReadTool,
-      "hash-edit": hashEditTool,
-      "hash-patch": hashPatchTool,
-      "hash-write": hashWriteTool,
+      read: readTool,
+      edit: editTool,
+      patch: patchTool,
+      write: writeTool,
       "hash-check": hashCheckTool,
-    },
+    }
   }
 }
 

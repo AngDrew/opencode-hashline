@@ -230,7 +230,9 @@ export function buildHashlineSystemInstruction(config: Pick<HashlineRuntimeConfi
   return [
     "## Hashline — Line Reference System",
     "",
-    "Use hashline tools only: `hash-read`, `hash-check`, `hash-edit`, `hash-patch`, `hash-write`.",
+    "Use hashline-backed file tools only: `read`, `hash-check`, `edit`, `patch`, `write`.",
+    "",
+    "The `patch` tool here still expects hashline JSON operations inside `patchText`; it is not a unified diff patch tool.",
     "",
     `Annotated lines use \`${prefix}<line>#<hash>#<anchor>|<content>\` (example: \`${prefix}12#A3F#9BC|const value = 1\`).`,
     `Read output also includes \`${prefix}REV:<hash>\`; pass that value as \`file_rev\`/\`fileRev\` when editing.`,
@@ -260,17 +262,17 @@ export function buildHashlineSystemInstruction(config: Pick<HashlineRuntimeConfi
     "Prefer operations[] for all edits.",
     "Never send empty strings for ref/startRef/endRef/replacement/content; omit fields you are not using.",
     "",
-    "### Patch with patch_text JSON",
+    "### Patch with patchText JSON",
     "```json",
     '{ "patchText": "{\\"filePath\\":\\"src/app.ts\\",\\"fileRev\\":\\"1A2B3C4D\\",\\"operations\\":[{\\"op\\":\\"replace\\",\\"ref\\":\\"12#A3F#9BC\\",\\"content\\":\\"const value = 2\\"}]}" }',
     "```",
-    "`patchText` must be valid JSON (array or object).",
+    "`patchText` must be valid JSON (array or object). This `patch` tool expects hashline operations JSON, not unified diff text.",
     "",
     "### Write full file content",
     "```json",
     '{ "filePath": "src/app.ts", "fileRev": "1A2B3C4D", "content": "full file contents" }',
     "```",
-    "`hash-write` replaces the entire file.",
+    "`write` replaces the entire file.",
     "",
     "### Edit single-operation mode (fallback)",
     "```json",
@@ -285,7 +287,7 @@ export function buildHashlineSystemInstruction(config: Pick<HashlineRuntimeConfi
     "}",
     "```",
     "",
-    "After any successful hash-edit/hash-patch/hash-write, run hash-read again before issuing new refs.",
+    "After any successful edit/patch/write, run read again before issuing new refs."
   ].join("\n")
 }
 

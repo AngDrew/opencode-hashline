@@ -53,7 +53,7 @@ function hasAnySingleOperationValue(args: Record<string, unknown>): boolean {
 
 export default tool({
   description:
-    "Hashline-aware edit tool for hash-edit. Use operations[] for batch edits or operation + startRef/ref for a single hashline edit.",
+    "Hashline-aware edit tool for edit. Use operations[] for batch edits or operation + startRef/ref for a single hashline edit.",
   args: {
     filePath: tool.schema
       .string()
@@ -137,7 +137,7 @@ export default tool({
     if (!hasAnySingleFields) {
       throw new Error(
         "Single-operation payload is empty: operation was provided but no ref/startRef/replacement values were set. " +
-          "Call hash-read first, then pass startRef (or ref) and replacement/content; or use operations[].",
+          "Call read first, then pass startRef (or ref) and replacement/content; or use operations[]."
       )
     }
 

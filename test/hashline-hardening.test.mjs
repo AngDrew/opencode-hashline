@@ -57,6 +57,15 @@ async function loadBuiltToolModule(moduleFile) {
     path.join(toolsDir, "hashline-core.js"),
   )
 
+  for (const helperFile of ["read.js", "edit.js", "patch.js", "write.js"]) {
+    const helperSource = await fs.readFile(path.join(PROJECT_ROOT, `dist/.opencode/tools/${helperFile}`), "utf8")
+    const patchedHelperSource = helperSource
+      .replace(/from "@opencode-ai\/plugin"/g, 'from "./plugin.js"')
+      .replace(/from "\.\/hashline-core"/g, 'from "./hashline-core.js"')
+
+    await fs.writeFile(path.join(toolsDir, helperFile), patchedHelperSource, "utf8")
+  }
+
   await fs.writeFile(
     path.join(toolsDir, "plugin.js"),
     'import { z } from "zod"\nexport function tool(input) { return input }\ntool.schema = z\n',
@@ -140,7 +149,7 @@ test("shouldExclude matches common glob-style patterns", () => {
   assert.equal(shouldExclude("README.md", patterns), false)
 })
 
-test("hash-edit compatibility: operations[] should win when mixed payloads are sent", async () => {
+test("edit compatibility: operations[] should win when mixed payloads are sent", async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-mixed-payload-"))
   const filePath = path.join(tempDir, "sample.txt")
 
@@ -148,7 +157,7 @@ test("hash-edit compatibility: operations[] should win when mixed payloads are s
     await fs.writeFile(filePath, "line one\nline two\n", "utf8")
     const before = await fs.readFile(filePath, "utf8")
 
-    // Simulate the compatibility branch used by hash-edit when callers send both styles:
+    // Simulate the compatibility branch used by edit when callers send both styles:
     // execute operations[] and ignore top-level single-operation fields.
     await runHashlineOperations({
       filePath,
@@ -423,18 +432,18 @@ test("hashline operation emits metadata diff", async () => {
   }
 })
 
-test("hash-write emits metadata diff through wrapper", async () => {
+test("write emits metadata diff through wrapper", async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-write-wrapper-"))
   const filePath = path.join(tempDir, "sample.txt")
   const metadataCalls = []
   let cleanupToolModule = async () => {}
 
   try {
-    const { module, cleanup } = await loadBuiltToolModule("hash-write.js")
+    const { module, cleanup } = await loadBuiltToolModule("write.js")
     cleanupToolModule = cleanup
-    const { default: hashWriteTool } = module
+    const { default: writeTool } = module
 
-    const result = await hashWriteTool.execute(
+    const result = await writeTool.execute(
       {
         filePath,
         content: "alpha\nbeta\n",
@@ -464,7 +473,7 @@ test("hash-write emits metadata diff through wrapper", async () => {
   }
 })
 
-test("hash-patch emits metadata diff through wrapper", async () => {
+test("patch emits metadata diff through wrapper", async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-patch-wrapper-"))
   const filePath = path.join(tempDir, "sample.txt")
   const metadataCalls = []
@@ -492,11 +501,11 @@ test("hash-patch emits metadata diff through wrapper", async () => {
     assert.equal(typeof fileRev, "string")
     assert.equal(typeof line2Ref, "string")
 
-    const { module, cleanup } = await loadBuiltToolModule("hash-patch.js")
+    const { module, cleanup } = await loadBuiltToolModule("patch.js")
     cleanupToolModule = cleanup
-    const { default: hashPatchTool } = module
+    const { default: patchTool } = module
 
-    const result = await hashPatchTool.execute(
+    const result = await patchTool.execute(
       {
         patchText: JSON.stringify({
           filePath,

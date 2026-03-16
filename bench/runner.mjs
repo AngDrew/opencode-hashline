@@ -111,7 +111,7 @@ async function runOp(filePath, operation, content) {
   const ctx = await operationContext(filePath, targetLine)
 
   if (!ctx.fileRev) {
-    throw new Error("Missing fileRev from hash-read output")
+    throw new Error("Missing fileRev from read output")
   }
 
   if (!ctx.ref && operation !== "set_file") {

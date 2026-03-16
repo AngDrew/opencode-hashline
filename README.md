@@ -10,7 +10,7 @@
 
 ## What it does
 
-- Exposes `hash-read`, `hash-check`, `hash-edit`, `hash-patch`, and `hash-write` as distinct OpenCode tools.
+- Reverts tool names to built-in `read`, `edit`, `patch`, and `write` (while keeping `hash-check`) so OpenCode can render diffs closer to native behavior.
 - Returns stable line refs and a file revision marker instead of relying on raw line numbers.
 - Lets callers preflight refs and concurrency guards with `hash-check` before spending tokens on full edits.
 - Applies edits against exact refs, which helps prevent stale or ambiguous changes.
@@ -33,18 +33,18 @@ Add the plugin to `opencode.json`:
 }
 ```
 
-If you use per-agent permissions, allow the hashline tools explicitly:
+If you use per-agent permissions, allow the hashline-backed file tools explicitly:
 
 ```json
 {
   "agent": {
     "hashline": {
       "permission": {
-        "hash-read": "allow",
+        "read": "allow",
         "hash-check": "allow",
-        "hash-edit": "allow",
-        "hash-patch": "allow",
-        "hash-write": "allow"
+        "edit": "allow",
+        "patch": "allow",
+        "write": "allow"
       }
     }
   }
@@ -53,14 +53,14 @@ If you use per-agent permissions, allow the hashline tools explicitly:
 
 ## How it works
 
-1. `hash-read` returns annotated lines in the form `<line>#<hash>#<anchor>|<content>` and includes a `REV:<hash>` marker for the current file revision.
+1. `read` returns annotated lines in the form `<line>#<hash>#<anchor>|<content>` and includes a `REV:<hash>` marker for the current file revision.
 2. `hash-check` can validate refs, `fileRev`, and `expectedFileHash` before a write.
-3. `hash-edit` and `hash-patch` target those refs, while `hash-write` replaces the full file when a rewrite is simpler.
+3. `edit` and `patch` target those refs, while `write` replaces the full file when a rewrite is simpler.
 4. `fileRev` and `expectedFileHash` can reject stale writes when the file changed after the last read.
-5. `hash-edit`, `hash-patch`, and `hash-write` return inline diff previews and structured diff metadata.
-6. After every successful edit, read the file again before sending more refs.
+5. `edit`, `patch`, and `write` return inline diff previews and structured diff metadata.
+6. After every successful edit, patch, or write, read the file again before sending more refs.
 
-Example `hash-read` output:
+Example `read` output:
 
 ```text
 const x = 1
@@ -70,18 +70,18 @@ return x
 Typical flow:
 
 ```text
-hash-read -> capture refs + fileRev -> optional hash-check -> hash-edit/hash-patch/hash-write -> hash-read again
+read -> capture refs + fileRev -> optional hash-check -> edit/patch/write -> read again
 ```
 
 ## Tools
 
 | Tool | Use it for | Notes |
 | --- | --- | --- |
-| `hash-read` | Read a file and collect stable refs | Output is hash-annotated; default prefix is `;;;` |
+| `read` | Read a file and collect stable refs | Output is hash-annotated; default prefix is `;;;` |
 | `hash-check` | Preflight refs and concurrency guards | Validates `fileRev`, `expectedFileHash`, and targets without writing |
-| `hash-edit` | Apply targeted edits against refs | Supports `operations[]` batch mode and single-operation mode |
-| `hash-patch` | Send a JSON patch payload | Uses the same operation engine as `hash-edit`; not a unified diff tool |
-| `hash-write` | Replace an entire file | Best when a full rewrite is simpler than incremental edits |
+| `edit` | Apply targeted edits against refs | Supports `operations[]` batch mode and single-operation mode |
+| `patch` | Send a JSON patch payload | Uses the same operation engine as `edit`; not a unified diff tool |
+| `write` | Replace an entire file | Best when a full rewrite is simpler than incremental edits |
 
 Common edit operations:
 
