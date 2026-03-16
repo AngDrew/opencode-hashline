@@ -2,7 +2,7 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { createHashlineHooks } from "./hashline-hooks"
 import { HashlineAnnotationCache, resolveHashlineConfig } from "./hashline-shared"
 
-const HASHLINE_TOOLS = new Set(["hash-read", "hash-edit", "hash-patch", "hash-write"])
+const HASHLINE_TOOLS = new Set(["hash-read", "hash-edit", "hash-patch", "hash-write", "hash-check"])
 
 function canonicalToolName(name: string): string {
   const lower = name.toLowerCase()
@@ -58,6 +58,13 @@ function normalizeArgsInPlace(toolName: string, args: Record<string, unknown>): 
     setStringAlias(args, "expectedFileHash", "expected_file_hash")
     setStringAlias(args, "fileRev", "file_rev")
     setBooleanAlias(args, "dryRun", "dry_run")
+  }
+
+  if (toolName === "hash-check") {
+    setStringAlias(args, "filePath", "file_path")
+    setStringAlias(args, "expectedFileHash", "expected_file_hash")
+    setStringAlias(args, "fileRev", "file_rev")
+    setBooleanAlias(args, "safeReapply", "safe_reapply")
   }
 }
 

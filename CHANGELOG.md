@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-03-16
+
+### Added
+
+- Added `hash-check` as a lightweight preflight tool for validating refs, `fileRev`, and `expectedFileHash` before writing.
+- Added benchmark harness files under `bench/` plus `npm run bench` and `npm run bench:legacy` scripts.
+- Added regression coverage for diff previews, metadata emission, and `hash-check` validation.
+
+### Changed
+
+- Updated README, codemaps, and package scripts to document benchmarking and the expanded hashline workflow.
+- Hashline operations now emit structured diff metadata in addition to inline diff previews for compatible OpenCode surfaces.
+
+### Fixed
+
+- `hash-edit`, `hash-patch`, and `hash-write` now return diff previews directly in tool output.
+- Legacy edit formatting now includes diff previews for full-file and string-replace operations.
+
 ## [1.1.2] - 2026-03-14
 
 ### Fixed

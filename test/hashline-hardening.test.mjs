@@ -11,8 +11,8 @@ import {
   getAdaptiveHashLength,
   runHashlineRead,
   runHashlineOperations,
+  runHashlineCheck,
 } from "../dist/.opencode/tools/hashline-core.js"
-
 const PROJECT_ROOT = process.cwd()
 
 const SHARED_STUB_IMPORT = "../tools/hashline-core.js"
@@ -42,6 +42,44 @@ async function loadSharedModule() {
   const shared = await import(moduleUrl.href)
 
   return { tempDir, shared }
+}
+
+async function loadBuiltToolModule(moduleFile) {
+  const sandboxRoot = path.join(PROJECT_ROOT, ".slim")
+  await fs.mkdir(sandboxRoot, { recursive: true })
+
+  const tempDir = await fs.mkdtemp(path.join(sandboxRoot, "hashline-tool-module-"))
+  const toolsDir = path.join(tempDir, "tools")
+  await fs.mkdir(toolsDir, { recursive: true })
+
+  await fs.copyFile(
+    path.join(PROJECT_ROOT, "dist/.opencode/tools/hashline-core.js"),
+    path.join(toolsDir, "hashline-core.js"),
+  )
+
+  await fs.writeFile(
+    path.join(toolsDir, "plugin.js"),
+    'import { z } from "zod"\nexport function tool(input) { return input }\ntool.schema = z\n',
+    "utf8",
+  )
+
+  const toolSource = await fs.readFile(path.join(PROJECT_ROOT, `dist/.opencode/tools/${moduleFile}`), "utf8")
+  const patchedToolSource = toolSource
+    .replace(/from "@opencode-ai\/plugin"/g, 'from "./plugin.js"')
+    .replace(/from "\.\/hashline-core"/g, 'from "./hashline-core.js"')
+
+  await fs.writeFile(path.join(toolsDir, moduleFile), patchedToolSource, "utf8")
+  await fs.writeFile(path.join(tempDir, "package.json"), '{"type":"module"}', "utf8")
+
+  const moduleUrl = `${pathToFileURL(path.join(toolsDir, moduleFile)).href}?t=${Date.now()}`
+  const mod = await import(moduleUrl)
+
+  return {
+    module: mod,
+    async cleanup() {
+      await fs.rm(tempDir, { recursive: true, force: true })
+    },
+  }
 }
 
 const { tempDir: sharedTempDir, shared } = await loadSharedModule()
@@ -228,6 +266,270 @@ test("replace accepts equivalent ref + startRef/endRef payloads", async () => {
     const after = await fs.readFile(filePath, "utf8")
     assert.equal(after, "alpha\nbeta updated\ngamma\n")
   } finally {
+    await fs.rm(tempDir, { recursive: true, force: true })
+  }
+})
+
+test("hash-check validates guards and refs without writing", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-check-"))
+  const filePath = path.join(tempDir, "sample.txt")
+
+  try {
+    const original = "alpha\nbeta\ngamma\n"
+    await fs.writeFile(filePath, original, "utf8")
+
+    const readText = await runHashlineRead({
+      filePath,
+      offset: 1,
+      limit: 200,
+      context: { directory: PROJECT_ROOT },
+    })
+
+    const fileHash10 = (() => {
+      const match = String(readText).match(/file_hash=\"([A-F0-9]{10})\"/)
+      return match ? match[1] : undefined
+    })()
+    const line2Ref = (() => {
+      const match = String(readText).match(/#HL\s+2#([A-F0-9]{3,4})#([A-F0-9]{3,4})\|beta/m)
+      return match ? `2#${match[1]}#${match[2]}` : undefined
+    })()
+
+    assert.equal(typeof fileHash10, "string")
+    assert.equal(typeof line2Ref, "string")
+
+    const ok = await runHashlineCheck({
+      filePath,
+      fileRev: computeCoreFileRev(original),
+      expectedFileHash: fileHash10,
+      targets: [{ op: "replace", ref: line2Ref }],
+      context: { directory: PROJECT_ROOT },
+    })
+
+    assert.match(ok, /Hashline check passed/)
+
+    const after = await fs.readFile(filePath, "utf8")
+    assert.equal(after, original)
+
+    await assert.rejects(
+      runHashlineCheck({
+        filePath,
+        fileRev: "00000000",
+        context: { directory: PROJECT_ROOT },
+      }),
+      /File revision mismatch/,
+    )
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true })
+  }
+})
+
+test("hashline operation result includes diff preview", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-diff-preview-"))
+  const filePath = path.join(tempDir, "sample.txt")
+
+  try {
+    await fs.writeFile(filePath, "alpha\nbeta\ngamma\n", "utf8")
+
+    const readText = await runHashlineRead({
+      filePath,
+      offset: 1,
+      limit: 200,
+      context: { directory: PROJECT_ROOT },
+    })
+
+    const line2Ref = (() => {
+      const match = String(readText).match(/#HL\s+2#([A-F0-9]{3,4})#([A-F0-9]{3,4})\|beta/m)
+      return match ? `2#${match[1]}#${match[2]}` : undefined
+    })()
+
+    assert.equal(typeof line2Ref, "string")
+
+    const result = await runHashlineOperations({
+      filePath,
+      operations: [
+        {
+          op: "replace",
+          ref: line2Ref,
+          content: "beta updated",
+        },
+      ],
+      context: { directory: PROJECT_ROOT },
+    })
+
+    assert.match(result, /Diff preview:/)
+    assert.match(result, /```diff/)
+    assert.match(result, /-beta/)
+    assert.match(result, /\+beta updated/)
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true })
+  }
+})
+
+
+test("hashline operation emits metadata diff", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-diff-metadata-"))
+  const filePath = path.join(tempDir, "sample.txt")
+  const metadataCalls = []
+
+  try {
+    await fs.writeFile(filePath, "alpha\nbeta\ngamma\n", "utf8")
+
+    const readText = await runHashlineRead({
+      filePath,
+      offset: 1,
+      limit: 200,
+      context: { directory: PROJECT_ROOT },
+    })
+
+    const line2Ref = (() => {
+      const match = String(readText).match(/#HL\s+2#([A-F0-9]{3,4})#([A-F0-9]{3,4})\|beta/m)
+      return match ? `2#${match[1]}#${match[2]}` : undefined
+    })()
+
+    assert.equal(typeof line2Ref, "string")
+
+    const result = await runHashlineOperations({
+      filePath,
+      operations: [
+        {
+          op: "replace",
+          ref: line2Ref,
+          content: "beta updated",
+        },
+      ],
+      context: {
+        directory: PROJECT_ROOT,
+        metadata(input) {
+          metadataCalls.push(input)
+        },
+      },
+    })
+
+    assert.match(result, /Diff preview:/)
+    assert.equal(metadataCalls.length, 1)
+    assert.equal(metadataCalls[0]?.metadata?.filepath, filePath)
+    assert.deepEqual(metadataCalls[0]?.metadata?.filediff, {
+      additions: 1,
+      deletions: 1,
+    })
+    assert.equal(metadataCalls[0]?.metadata?.files?.[0]?.filepath, filePath)
+    assert.match(String(metadataCalls[0]?.metadata?.diff), /^--- a\//m)
+    assert.match(String(metadataCalls[0]?.metadata?.diff), /^\+\+\+ b\//m)
+    assert.match(String(metadataCalls[0]?.metadata?.diff), /-beta/)
+    assert.match(String(metadataCalls[0]?.metadata?.diff), /\+beta updated/)
+    assert.match(String(metadataCalls[0]?.metadata?.diffPreview), /```diff/)
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true })
+  }
+})
+
+test("hash-write emits metadata diff through wrapper", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-write-wrapper-"))
+  const filePath = path.join(tempDir, "sample.txt")
+  const metadataCalls = []
+  let cleanupToolModule = async () => {}
+
+  try {
+    const { module, cleanup } = await loadBuiltToolModule("hash-write.js")
+    cleanupToolModule = cleanup
+    const { default: hashWriteTool } = module
+
+    const result = await hashWriteTool.execute(
+      {
+        filePath,
+        content: "alpha\nbeta\n",
+        dryRun: true,
+      },
+      {
+        directory: PROJECT_ROOT,
+        metadata(input) {
+          metadataCalls.push(input)
+        },
+      },
+    )
+
+    assert.match(result, /Diff preview:/)
+    assert.equal(metadataCalls.length, 1)
+    assert.deepEqual(metadataCalls[0]?.metadata?.filediff, {
+      additions: 2,
+      deletions: 0,
+    })
+    assert.match(String(metadataCalls[0]?.metadata?.diff), /^--- a\//m)
+    assert.match(String(metadataCalls[0]?.metadata?.diff), /@@ -1,0 \+1,2 @@ set_file/)
+    assert.match(String(metadataCalls[0]?.metadata?.diff), /\+alpha/)
+    assert.match(String(metadataCalls[0]?.metadata?.diff), /\+beta/)
+  } finally {
+    await cleanupToolModule()
+    await fs.rm(tempDir, { recursive: true, force: true })
+  }
+})
+
+test("hash-patch emits metadata diff through wrapper", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-patch-wrapper-"))
+  const filePath = path.join(tempDir, "sample.txt")
+  const metadataCalls = []
+  let cleanupToolModule = async () => {}
+
+  try {
+    await fs.writeFile(filePath, "alpha\nbeta\ngamma\n", "utf8")
+
+    const readText = await runHashlineRead({
+      filePath,
+      offset: 1,
+      limit: 200,
+      context: { directory: PROJECT_ROOT },
+    })
+
+    const fileRev = (() => {
+      const match = String(readText).match(/#HL REV:([A-F0-9]{8})/)
+      return match ? match[1] : undefined
+    })()
+    const line2Ref = (() => {
+      const match = String(readText).match(/#HL\s+2#([A-F0-9]{3,4})#([A-F0-9]{3,4})\|beta/m)
+      return match ? `2#${match[1]}#${match[2]}` : undefined
+    })()
+
+    assert.equal(typeof fileRev, "string")
+    assert.equal(typeof line2Ref, "string")
+
+    const { module, cleanup } = await loadBuiltToolModule("hash-patch.js")
+    cleanupToolModule = cleanup
+    const { default: hashPatchTool } = module
+
+    const result = await hashPatchTool.execute(
+      {
+        patchText: JSON.stringify({
+          filePath,
+          fileRev,
+          operations: [
+            {
+              op: "replace",
+              ref: line2Ref,
+              content: "beta patched",
+            },
+          ],
+        }),
+        dryRun: true,
+      },
+      {
+        directory: PROJECT_ROOT,
+        metadata(input) {
+          metadataCalls.push(input)
+        },
+      },
+    )
+
+    assert.match(result, /Diff preview:/)
+    assert.equal(metadataCalls.length, 1)
+    assert.deepEqual(metadataCalls[0]?.metadata?.filediff, {
+      additions: 1,
+      deletions: 1,
+    })
+    assert.match(String(metadataCalls[0]?.metadata?.diff), /^--- a\//m)
+    assert.match(String(metadataCalls[0]?.metadata?.diff), /-beta/)
+    assert.match(String(metadataCalls[0]?.metadata?.diff), /\+beta patched/)
+  } finally {
+    await cleanupToolModule()
     await fs.rm(tempDir, { recursive: true, force: true })
   }
 })
