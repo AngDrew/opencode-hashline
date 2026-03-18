@@ -15,6 +15,7 @@
 - Lets callers preflight refs and concurrency guards with `hash-check` before spending tokens on full edits.
 - Applies edits against exact refs, which helps prevent stale or ambiguous changes.
 - Adds inline diff previews and structured diff metadata for edit, patch, and write results.
+- Normalizes common built-in/snake_case payload aliases (including nested `operations[]` and `patchText` object keys) so GPT-generated tool calls bridge cleanly to canonical hashline arguments.
 
 ## Install
 

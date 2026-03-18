@@ -1123,15 +1123,18 @@ export function parsePatchText(patchText: string): {
   if (parsed && typeof parsed === "object") {
     const obj = parsed as {
       filePath?: string
-      operations?: HashlineOperation[]
+      file_path?: string
+      operations?: HashlineOperationInput[]
       expectedFileHash?: string
+      expected_file_hash?: string
       fileRev?: string
+      file_rev?: string
     }
     return {
-      filePath: obj.filePath,
+      filePath: firstNonEmptyString(obj.filePath, obj.file_path),
       operations: obj.operations,
-      expectedFileHash: obj.expectedFileHash,
-      fileRev: obj.fileRev,
+      expectedFileHash: firstNonEmptyString(obj.expectedFileHash, obj.expected_file_hash),
+      fileRev: firstNonEmptyString(obj.fileRev, obj.file_rev),
     }
   }
 
@@ -1142,16 +1145,22 @@ export type HashlineOperationInput = {
   op: HashlineOpName
   ref?: string
   startRef?: string
+  start_ref?: string
   endRef?: string
+  end_ref?: string
   content?: string
+  replacement?: string
 }
 
 export function mapOperationInput(input: HashlineOperationInput): HashlineOperation {
+  const startRef = firstNonEmptyString(input.startRef, input.start_ref)
+  const endRef = firstNonEmptyString(input.endRef, input.end_ref)
+
   return {
     op: input.op,
     ref: input.ref,
-    startRef: input.startRef,
-    endRef: input.endRef,
-    content: input.content,
+    startRef,
+    endRef,
+    content: input.content ?? input.replacement,
   }
 }

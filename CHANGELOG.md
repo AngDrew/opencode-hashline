@@ -2,7 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-03-17
+## [Unreleased]
+
+## [1.3.1] - 2026-03-18
+
+### Fixed
+
+- Smoothed alias bridging for model-generated tool payloads by normalizing nested `edit.operations[]` aliases (`start_ref`, `end_ref`, `replacement`) to canonical fields.
+- Extended `patchText` object parsing to accept snake_case keys (`file_path`, `expected_file_hash`, `file_rev`) and map nested operation aliases.
+- Added regression coverage for alias-heavy `edit`, `patch`, and routing normalization paths to prevent regressions.
+
+## [1.3.0] - 2026-03-17
 
 ### Changed
 
@@ -10,6 +20,7 @@ All notable changes to this project will be documented in this file.
 - Updated routing, permissions, docs, smoke tests, and regression coverage to follow the built-in-surface naming and keep hashline semantics behind the same tool names as native.
 - Clarified across docs and test fixtures that the renamed `patch` tool still expects hashline JSON operations in `patchText`, not unified diff input.
 - Removed default-exported `hash-read`, `hash-edit`, `hash-patch`, and `hash-write` tool modules so runtime discovery exposes only built-in-surface `read`, `edit`, `patch`, and `write` (plus `hash-check`).
+
 ## [1.2.0] - 2026-03-16
 
 ### Added

@@ -27,6 +27,16 @@ function setBooleanAlias(args: Record<string, unknown>, canonicalKey: string, al
   }
 }
 
+function normalizeOperationAliasesInPlace(operation: unknown): void {
+  if (!operation || typeof operation !== "object" || Array.isArray(operation)) {
+    return
+  }
+
+  const op = operation as Record<string, unknown>
+  setStringAlias(op, "startRef", "start_ref")
+  setStringAlias(op, "endRef", "end_ref")
+  setStringAlias(op, "content", "replacement")
+}
 function normalizeArgsInPlace(toolName: string, args: Record<string, unknown>): void {
   if (toolName === "read") {
     setStringAlias(args, "filePath", "file_path")
@@ -41,6 +51,12 @@ function normalizeArgsInPlace(toolName: string, args: Record<string, unknown>): 
     setStringAlias(args, "expectedFileHash", "expected_file_hash")
     setStringAlias(args, "fileRev", "file_rev")
     setBooleanAlias(args, "dryRun", "dry_run")
+    const operations = args.operations
+    if (Array.isArray(operations)) {
+      for (const operation of operations) {
+        normalizeOperationAliasesInPlace(operation)
+      }
+    }
     return
   }
 

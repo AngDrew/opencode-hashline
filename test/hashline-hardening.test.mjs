@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url"
 import {
   computeFileRev as computeCoreFileRev,
   getAdaptiveHashLength,
+  parsePatchText,
   runHashlineRead,
   runHashlineOperations,
   runHashlineCheck,
@@ -81,6 +82,49 @@ async function loadBuiltToolModule(moduleFile) {
   await fs.writeFile(path.join(tempDir, "package.json"), '{"type":"module"}', "utf8")
 
   const moduleUrl = `${pathToFileURL(path.join(toolsDir, moduleFile)).href}?t=${Date.now()}`
+  const mod = await import(moduleUrl)
+
+  return {
+    module: mod,
+    async cleanup() {
+      await fs.rm(tempDir, { recursive: true, force: true })
+    },
+  }
+}
+
+async function loadRoutingPluginModule() {
+  const sandboxRoot = path.join(PROJECT_ROOT, ".slim")
+  await fs.mkdir(sandboxRoot, { recursive: true })
+
+  const tempDir = await fs.mkdtemp(path.join(sandboxRoot, "hashline-plugin-module-"))
+  const pluginsDir = path.join(tempDir, "plugins")
+  const toolsDir = path.join(tempDir, "tools")
+
+  await fs.mkdir(pluginsDir, { recursive: true })
+  await fs.mkdir(toolsDir, { recursive: true })
+
+  const patchImports = (source) => source
+    .replace(/from "\.\/hashline-hooks"/g, 'from "./hashline-hooks.js"')
+    .replace(/from "\.\/hashline-shared"/g, 'from "./hashline-shared.js"')
+    .replace(/from "\.\.\/tools\/hashline-core\.js"/g, 'from "../tools/hashline-core.js"')
+
+  const routingSource = await fs.readFile(path.join(PROJECT_ROOT, "dist/.opencode/plugins/hashline-routing.js"), "utf8")
+  const hooksSource = await fs.readFile(path.join(PROJECT_ROOT, "dist/.opencode/plugins/hashline-hooks.js"), "utf8")
+  const sharedSource = await fs.readFile(path.join(PROJECT_ROOT, "dist/.opencode/plugins/hashline-shared.js"), "utf8")
+
+  await fs.writeFile(path.join(pluginsDir, "hashline-routing.js"), patchImports(routingSource), "utf8")
+  await fs.writeFile(path.join(pluginsDir, "hashline-hooks.js"), patchImports(hooksSource), "utf8")
+  const patchedShared = patchImports(sharedSource).replace(SHARED_STUB_REGEX, SHARED_STUB_FILE.trimEnd())
+  await fs.writeFile(path.join(pluginsDir, "hashline-shared.js"), patchedShared, "utf8")
+
+  await fs.copyFile(
+    path.join(PROJECT_ROOT, "dist/.opencode/tools/hashline-core.js"),
+    path.join(toolsDir, "hashline-core.js"),
+  )
+
+  await fs.writeFile(path.join(tempDir, "package.json"), '{"type":"module"}', "utf8")
+
+  const moduleUrl = `${pathToFileURL(path.join(pluginsDir, "hashline-routing.js")).href}?t=${Date.now()}`
   const mod = await import(moduleUrl)
 
   return {
@@ -374,6 +418,178 @@ test("hashline operation result includes diff preview", async () => {
   }
 })
 
+test("edit wrapper maps operation snake_case refs and replacement alias", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-op-alias-"))
+  const filePath = path.join(tempDir, "sample.txt")
+  let cleanupToolModule = async () => {}
+
+  try {
+    const original = "alpha\nbeta\ngamma\n"
+    await fs.writeFile(filePath, original, "utf8")
+
+    const readText = await runHashlineRead({
+      filePath,
+      offset: 1,
+      limit: 200,
+      context: { directory: PROJECT_ROOT },
+    })
+
+    const line2Ref = (() => {
+      const match = String(readText).match(/#HL\s+2#([A-F0-9]{3,4})#([A-F0-9]{3,4})\|beta/m)
+      return match ? `2#${match[1]}#${match[2]}` : undefined
+    })()
+
+    assert.equal(typeof line2Ref, "string")
+
+    const { module, cleanup } = await loadBuiltToolModule("edit.js")
+    cleanupToolModule = cleanup
+    const { default: editTool } = module
+
+    const result = await editTool.execute(
+      {
+        filePath,
+        operations: [
+          {
+            op: "replace",
+            start_ref: line2Ref,
+            end_ref: line2Ref,
+            replacement: "beta aliased",
+          },
+        ],
+      },
+      { directory: PROJECT_ROOT },
+    )
+
+    assert.match(result, /Hashline hashline edit completed/)
+
+    const after = await fs.readFile(filePath, "utf8")
+    assert.equal(after, "alpha\nbeta aliased\ngamma\n")
+  } finally {
+    await cleanupToolModule()
+    await fs.rm(tempDir, { recursive: true, force: true })
+  }
+})
+
+test("parsePatchText accepts snake_case object keys and nested operation aliases", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-patch-alias-"))
+  const filePath = path.join(tempDir, "sample.txt")
+  let cleanupToolModule = async () => {}
+
+  try {
+    const original = "alpha\nbeta\ngamma\n"
+    await fs.writeFile(filePath, original, "utf8")
+
+    const readText = await runHashlineRead({
+      filePath,
+      offset: 1,
+      limit: 200,
+      context: { directory: PROJECT_ROOT },
+    })
+
+    const fileHash10 = (() => {
+      const match = String(readText).match(/file_hash=\"([A-F0-9]{10})\"/)
+      return match ? match[1] : undefined
+    })()
+    const fileRev8 = (() => {
+      const match = String(readText).match(/#HL REV:([A-F0-9]{8})/)
+      return match ? match[1] : undefined
+    })()
+    const line2Ref = (() => {
+      const match = String(readText).match(/#HL\s+2#([A-F0-9]{3,4})#([A-F0-9]{3,4})\|beta/m)
+      return match ? `2#${match[1]}#${match[2]}` : undefined
+    })()
+
+    assert.equal(typeof fileHash10, "string")
+    assert.equal(typeof fileRev8, "string")
+    assert.equal(typeof line2Ref, "string")
+
+    const { module, cleanup } = await loadBuiltToolModule("patch.js")
+    cleanupToolModule = cleanup
+    const { default: patchTool } = module
+
+    const result = await patchTool.execute(
+      {
+        patchText: JSON.stringify({
+          file_path: filePath,
+          expected_file_hash: fileHash10,
+          file_rev: fileRev8,
+          operations: [
+            {
+              op: "replace",
+              start_ref: line2Ref,
+              end_ref: line2Ref,
+              replacement: "beta patched alias",
+            },
+          ],
+        }),
+      },
+      { directory: PROJECT_ROOT },
+    )
+
+    assert.match(result, /Hashline hashline edit (dry run )?completed/)
+
+    const after = await fs.readFile(filePath, "utf8")
+    assert.equal(after, "alpha\nbeta patched alias\ngamma\n")
+  } finally {
+    await cleanupToolModule()
+    await fs.rm(tempDir, { recursive: true, force: true })
+  }
+})
+
+test("parsePatchText maps snake_case object aliases", () => {
+  const parsed = parsePatchText(
+    JSON.stringify({
+      file_path: "a/b/sample.txt",
+      expected_file_hash: "ABCDEF1234",
+      file_rev: "1A2B3C4D",
+      operations: [{ op: "set_file", content: "hello" }],
+    }),
+  )
+
+  assert.equal(parsed.filePath, "a/b/sample.txt")
+  assert.equal(parsed.expectedFileHash, "ABCDEF1234")
+  assert.equal(parsed.fileRev, "1A2B3C4D")
+  assert.equal(Array.isArray(parsed.operations), true)
+  assert.equal(parsed.operations?.length, 1)
+})
+
+test("HashlineRouting normalizes nested edit operation aliases", async () => {
+  let cleanupPluginModule = async () => {}
+
+  try {
+    const { module, cleanup } = await loadRoutingPluginModule()
+    cleanupPluginModule = cleanup
+
+    const { HashlineRouting: loadedRouting } = module
+    const plugin = await loadedRouting({ directory: PROJECT_ROOT })
+    const beforeHook = plugin["tool.execute.before"]
+
+    assert.equal(typeof beforeHook, "function")
+
+    const output = {
+      args: {
+        file_path: "demo.txt",
+        operations: [
+          {
+            op: "replace",
+            start_ref: "2#AAA#BBB",
+            end_ref: "2#AAA#BBB",
+            replacement: "next",
+          },
+        ],
+      },
+    }
+
+    await beforeHook({ tool: "edit" }, output)
+
+    assert.equal(output.args.filePath, "demo.txt")
+    assert.equal(output.args.operations[0].startRef, "2#AAA#BBB")
+    assert.equal(output.args.operations[0].endRef, "2#AAA#BBB")
+    assert.equal(output.args.operations[0].content, "next")
+  } finally {
+    await cleanupPluginModule()
+  }
+})
 
 test("hashline operation emits metadata diff", async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-diff-metadata-"))
