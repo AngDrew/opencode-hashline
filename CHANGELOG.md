@@ -2,6 +2,93 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+## [1.3.2] - 2026-03-22
+
+### Changed
+
+- Moved hashline-core from tools/ to lib/ to prevent auto-loading as a custom tool.
+- Created hashline-resolve-edit tool for hashline operations resolution.
+
+### Fixed
+
+- Cleaned up test files and improved tool file organization.
+
+## [1.3.1] - 2026-03-18
+
+### Fixed
+
+- Smoothed alias bridging for model-generated tool payloads by normalizing nested `edit.operations[]` aliases (`start_ref`, `end_ref`, `replacement`) to canonical fields.
+- Extended `patchText` object parsing to accept snake_case keys (`file_path`, `expected_file_hash`, `file_rev`) and map nested operation aliases.
+- Added regression coverage for alias-heavy `edit`, `patch`, and routing normalization paths to prevent regressions.
+
+## [1.3.0] - 2026-03-17
+
+### Changed
+
+- Reverted the primary tool surface to built-in names (`read`, `edit`, `patch`, `write`) while keeping `hash-check` as the custom preflight tool so OpenCode shows native diff UI behavior.
+- Updated routing, permissions, docs, smoke tests, and regression coverage to follow the built-in-surface naming and keep hashline semantics behind the same tool names as native.
+- Clarified across docs and test fixtures that the renamed `patch` tool still expects hashline JSON operations in `patchText`, not unified diff input.
+- Removed default-exported `hash-read`, `hash-edit`, `hash-patch`, and `hash-write` tool modules so runtime discovery exposes only built-in-surface `read`, `edit`, `patch`, and `write` (plus `hash-check`).
+
+## [1.2.0] - 2026-03-16
+
+### Added
+
+- Added `hash-check` as a lightweight preflight tool for validating refs, `fileRev`, and `expectedFileHash` before writing.
+- Added benchmark harness files under `bench/` plus `npm run bench` and `npm run bench:legacy` scripts.
+- Added regression coverage for diff previews, metadata emission, and `hash-check` validation.
+
+### Changed
+
+- Updated README, codemaps, and package scripts to document benchmarking and the expanded hashline workflow.
+- Hashline operations now emit structured diff metadata in addition to inline diff previews for compatible OpenCode surfaces.
+
+### Fixed
+
+- `hash-edit`, `hash-patch`, and `hash-write` now return diff previews directly in tool output.
+- Legacy edit formatting now includes diff previews for full-file and string-replace operations.
+
+## [1.1.2] - 2026-03-14
+
+### Fixed
+
+- Resolved `hash-edit` compatibility failure for `replace` when clients send both `ref` and `startRef/endRef` with equivalent targets.
+- Normalized ref-range resolution to accept equivalent duplicate refs while still rejecting conflicting dual-target payloads.
+
+### Added
+
+- Added regression coverage for equivalent `ref` + `startRef/endRef` replace payloads.
+
+## [1.1.1] - 2026-03-14
+
+### Changed
+
+- Clarified hashline system instructions to prefer `operations[]` and omit unused fields instead of sending empty strings.
+- Added hardening regression coverage for mixed payload handling and `fileRev` compatibility behavior.
+
+### Fixed
+
+- Hardened `hash-edit` single-operation validation with actionable errors for empty/malformed refs and missing replacement/content.
+- Improved routing alias normalization so empty canonical fields no longer block non-empty snake_case fallback values.
+- Added `fileRev` compatibility handling to accept either the canonical 8-char `#HL REV` token or the 10-char `file_hash` token when models send the wrong field.
+
+## [1.1.0] - 2026-03-14
+
+### Changed
+
+- Renamed tool registrations to distinct hashline names: `hash-read`, `hash-edit`, `hash-patch`, and `hash-write`.
+- Updated plugin wiring, routing normalization, system instructions, docs, config, and codemaps to consistently use the `hash-*` tool surface.
+
+### Fixed
+
+- Fixed `tool.execute.before` argument normalization to mutate args in place for OpenCode compatibility.
+
+### Removed
+
+- Removed legacy built-in-name tool entry files: `.opencode/tools/read.ts`, `.opencode/tools/edit.ts`, `.opencode/tools/patch.ts`, and `.opencode/tools/write.ts`.
+
 ## [1.0.3] - 2026-03-12
 
 ### Added

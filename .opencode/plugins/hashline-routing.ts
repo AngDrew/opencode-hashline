@@ -42,7 +42,7 @@ function normalizeArgs(toolName: string, args: Record<string, unknown>): Record<
 export const HashlineRouting: Plugin = async (input) => {
   const projectDirectory = typeof input?.directory === "string" ? input.directory : undefined
   const config = resolveHashlineConfig(projectDirectory)
-  const cache = new HashlineAnnotationCache(config.cacheSize)
+  const cache = new HashlineAnnotationCache(config.cacheSize ?? 128)
   const hooks = createHashlineHooks(config, cache)
 
   return {

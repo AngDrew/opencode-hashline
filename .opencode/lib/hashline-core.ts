@@ -873,3 +873,61 @@ export function mapOperationInput(input: HashlineOperationInput): HashlineOperat
     content: input.content,
   }
 }
+
+export interface HashlineResolveEditResult {
+  filePath: string
+  oldString: string
+  newString: string
+  fileRev?: string
+  summary: {
+    operations: number
+    additions: number
+    removals: number
+    linesBefore: number
+    linesAfter: number
+  }
+}
+
+export async function resolveHashlineEdit(params: HashlineExecutionParams): Promise<HashlineResolveEditResult> {
+  const absolutePath = resolveFilePath(params.filePath, params.context)
+  const existingSnapshot = await readSnapshotIfExists(absolutePath)
+
+  const snapshot = existingSnapshot ?? emptySnapshot(absolutePath)
+  const normalizedOps = normalizeOperations(params.operations)
+
+  if (params.expectedFileHash && snapshot.fileHash !== params.expectedFileHash.toUpperCase()) {
+    throw new Error(
+      `File hash mismatch for ${params.filePath}. Expected ${params.expectedFileHash.toUpperCase()}, actual ${snapshot.fileHash}. Read the file again before editing.`,
+    )
+  }
+
+  if (params.fileRev) {
+    const expectedRev = params.fileRev.toUpperCase()
+    const actualRev = computeFileRev(snapshot.raw)
+    if (actualRev !== expectedRev) {
+      throw new Error(
+        `File revision mismatch for ${params.filePath}. Expected ${expectedRev}, actual ${actualRev}. Read the file again before editing.`,
+      )
+    }
+  }
+
+  const changes = resolveChanges(snapshot, normalizedOps, Boolean(params.safeReapply))
+  validateChangeConflicts(changes)
+
+  const applied = applyChanges(snapshot, changes)
+  const after = snapshotFromLines(snapshot, applied.lines)
+
+  return {
+    filePath: params.filePath,
+    oldString: snapshot.raw,
+    newString: after.raw,
+    fileRev: computeFileRev(snapshot.raw),
+    summary: {
+      operations: normalizedOps.length,
+      additions: applied.additions,
+      removals: applied.removals,
+      linesBefore: snapshot.lines.length,
+      linesAfter: after.lines.length,
+    },
+  }
+}

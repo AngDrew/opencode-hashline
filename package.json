@@ -1,6 +1,6 @@
 {
   "name": "@angdrew/opencode-hashline-plugin",
-  "version": "1.0.3",
+  "version": "1.3.2",
   "description": "Hashline-based read/edit/patch/write tool overrides for OpenCode.",
   "repository": {
     "type": "git",
@@ -26,7 +26,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "node --test",
-    "bench": "node scripts/benchmark.mjs",
+    "bench": "node bench/runner.mjs",
+    "bench:legacy": "node scripts/benchmark.mjs",
     "pack:check": "npm pack --dry-run",
     "prepublishOnly": "npm run build"
   },

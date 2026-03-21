@@ -5,6 +5,13 @@ import { tmpdir } from "node:os"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { Hooks } from "@opencode-ai/plugin"
 import {
+  mapOperationInput,
+  resolveFilePath,
+  runHashlineRead,
+  runHashlineOperationsDetailed,
+  type HashlineOperationInput,
+} from "../lib/hashline-core.js"
+import {
   buildHashlineSystemInstruction,
   extractPathFromToolArgs,
   formatWithRuntimeConfig,
@@ -40,6 +47,142 @@ function isFileReadTool(tool: string, args?: Record<string, unknown>): boolean {
 
 function isFileEditTool(tool: string): boolean {
   return toolEndsWith(tool, FILE_EDIT_TOOLS)
+}
+
+function isNativeEditTool(tool: string): boolean {
+  return toolEndsWith(tool, ["edit"])
+}
+
+function getCanonicalPath(filePath: string, input?: Record<string, unknown>): string {
+  try {
+    return resolveFilePath(filePath, {
+      directory: typeof input?.directory === "string" ? input.directory : undefined,
+    })
+  } catch {
+    return filePath
+  }
+}
+
+function invalidateFileCache(
+  cache: HashlineAnnotationCache,
+  args: Record<string, unknown>,
+  input?: Record<string, unknown>,
+): void {
+  const filePath = extractPathFromToolArgs(args)
+  if (!filePath) {
+    return
+  }
+
+  const canonicalPath = getCanonicalPath(filePath, input)
+  cache.invalidate(filePath)
+  cache.invalidate(canonicalPath)
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.length > 0) {
+      return value
+    }
+  }
+
+  return undefined
+}
+
+function firstBoolean(...values: unknown[]): boolean | undefined {
+  for (const value of values) {
+    if (typeof value === "boolean") {
+      return value
+    }
+  }
+
+  return undefined
+}
+
+function hasHashlineEditShape(args: Record<string, unknown>): boolean {
+  return (
+    Array.isArray(args.operations) ||
+    typeof args.operation === "string" ||
+    typeof args.ref === "string" ||
+    typeof args.startRef === "string" ||
+    typeof args.start_ref === "string"
+  )
+}
+
+function toHashlineOperations(args: Record<string, unknown>): HashlineOperationInput[] | null {
+  if (Array.isArray(args.operations) && args.operations.length > 0) {
+    return args.operations.map((entry) => {
+      const item = (entry ?? {}) as Record<string, unknown>
+      return {
+        op: String(item.op ?? "") as HashlineOperationInput["op"],
+        ref: firstString(item.ref),
+        startRef: firstString(item.startRef, item.start_ref),
+        endRef: firstString(item.endRef, item.end_ref),
+        content: firstString(item.content, item.replacement),
+      }
+    })
+  }
+
+  const operation = firstString(args.operation)
+  if (!operation) {
+    return null
+  }
+
+  const ref = firstString(args.ref)
+  const startRef = firstString(args.startRef, args.start_ref, ref)
+  const endRef = firstString(args.endRef, args.end_ref)
+  const content = firstString(args.replacement, args.content)
+
+  if (!startRef && !ref) {
+    return null
+  }
+
+  return [
+    {
+      op: operation === "replace" && endRef ? "replace_range" : (operation as HashlineOperationInput["op"]),
+      ref,
+      startRef,
+      endRef,
+      content,
+    },
+  ]
+}
+
+async function translateHashlineEditArgs(
+  args: Record<string, unknown>,
+  input: Record<string, unknown>,
+  config: HashlineRuntimeConfig,
+): Promise<Record<string, unknown> | null> {
+  if (!hasHashlineEditShape(args)) {
+    return null
+  }
+
+  const filePath = firstString(args.filePath, args.file_path, args.path, args.file)
+  if (!filePath) {
+    return null
+  }
+
+  const operations = toHashlineOperations(args)
+  if (!operations || operations.length === 0) {
+    return null
+  }
+
+  const result = await runHashlineOperationsDetailed({
+    filePath,
+    operations: operations.map(mapOperationInput),
+    expectedFileHash: firstString(args.expectedFileHash, args.expected_file_hash),
+    fileRev: firstString(args.fileRev, args.file_rev),
+    safeReapply: firstBoolean(args.safeReapply, args.safe_reapply) ?? config.safeReapply,
+    dryRun: true,
+    context: {
+      directory: typeof input.directory === "string" ? input.directory : undefined,
+    },
+  })
+
+  return {
+    filePath,
+    oldString: result.metadata.filediff.before,
+    newString: result.metadata.filediff.after,
+  }
 }
 
 const CONTENT_FIELD_KEYS = new Set([
@@ -191,7 +334,9 @@ type HashlinePluginHooks = Pick<
   "tool.execute.before" | "tool.execute.after" | "experimental.chat.system.transform" | "chat.message"
 >
 
-export function createHashlineHooks(config: HashlineRuntimeConfig, cache: HashlineAnnotationCache): HashlinePluginHooks {
+export function createHashlineHooks(config: HashlineRuntimeConfig, cache?: HashlineAnnotationCache): HashlinePluginHooks {
+  const effectiveCache = cache ?? new HashlineAnnotationCache(config.cacheSize ?? 128)
+
   return {
     "tool.execute.before": async (input, output) => {
       const name = input.tool
@@ -201,11 +346,30 @@ export function createHashlineHooks(config: HashlineRuntimeConfig, cache: Hashli
       }
 
       const args = (output.args ?? {}) as Record<string, unknown>
-      output.args = stripNestedHashes(args, config.prefix) as Record<string, unknown>
+      const sanitizedArgs = stripNestedHashes(args, config.prefix) as Record<string, unknown>
+
+      if (isNativeEditTool(name)) {
+        const translatedArgs = await translateHashlineEditArgs(
+          sanitizedArgs,
+          input as Record<string, unknown>,
+          config,
+        )
+        if (translatedArgs) {
+          output.args = translatedArgs
+          return
+        }
+      }
+
+      output.args = sanitizedArgs
     },
 
     "tool.execute.after": async (input, output) => {
       const args = (input.args ?? {}) as Record<string, unknown>
+
+      if (isFileEditTool(input.tool)) {
+        invalidateFileCache(effectiveCache, args, input as Record<string, unknown>)
+      }
+
       if (!isFileReadTool(input.tool, args)) {
         return
       }
@@ -214,36 +378,43 @@ export function createHashlineHooks(config: HashlineRuntimeConfig, cache: Hashli
         return
       }
 
-      const source = output.output
-      const alreadyAnnotated = stripHashlinePrefixes(source, config.prefix) !== source
-      if (
-        source.includes("<hashline-file ") ||
-        alreadyAnnotated ||
-        source.includes("# format: <line>#<hash>#<anchor>|<content>") ||
-        source.includes("# format: <line>#<hash>|<content>")
-      ) {
-        return
-      }
-
-      if (config.maxFileSize > 0 && getByteLength(source) > config.maxFileSize) {
-        return
-      }
-
       const filePathFromArgs = extractPathFromToolArgs(args)
-      if (typeof filePathFromArgs === "string" && shouldExclude(filePathFromArgs, config.exclude)) {
+      if (typeof filePathFromArgs !== "string") {
         return
       }
 
-      const cacheKey = filePathFromArgs ?? `${input.tool}:${source.length}`
-      const cached = cache.get(cacheKey, source)
+      const canonicalPath = getCanonicalPath(filePathFromArgs, input as Record<string, unknown>)
+
+      if (shouldExclude(filePathFromArgs, config.exclude)) {
+        return
+      }
+
+      const offset = typeof args.offset === "number" ? args.offset : undefined
+      const limit = typeof args.limit === "number" ? args.limit : undefined
+      const sourceKey = JSON.stringify({ filePath: canonicalPath, offset, limit })
+      const cacheKey = canonicalPath
+      const cached = effectiveCache.get(cacheKey, sourceKey)
       if (cached) {
         output.output = cached
         return
       }
 
-      const annotated = formatWithRuntimeConfig(source, config)
+      const annotated = await runHashlineRead({
+        filePath: filePathFromArgs,
+        offset,
+        limit,
+        context: {
+          directory: typeof (input as Record<string, unknown>).directory === "string"
+            ? ((input as Record<string, unknown>).directory as string)
+            : undefined,
+        },
+      })
 
-      cache.set(cacheKey, source, annotated)
+      if (config.maxFileSize > 0 && getByteLength(annotated) > config.maxFileSize) {
+        return
+      }
+
+      effectiveCache.set(cacheKey, sourceKey, annotated)
       output.output = annotated
     },
 
@@ -260,7 +431,7 @@ export function createHashlineHooks(config: HashlineRuntimeConfig, cache: Hashli
         output as { parts?: Array<Record<string, unknown>> },
         input as Record<string, unknown>,
         config,
-        cache,
+        effectiveCache,
       )
     },
   }

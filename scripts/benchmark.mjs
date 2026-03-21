@@ -11,11 +11,11 @@ import {
   runHashlineOperations,
   runHashlineRead,
   stringifyLines,
-} from "../dist/.opencode/tools/hashline-core.js"
+} from "../dist/.opencode/lib/hashline-core.js"
 
 const PROJECT_ROOT = process.cwd()
-const SHARED_STUB_FILE = 'import { getAdaptiveHashLength, hashlineAnchorHash, hashlineLineHash } from "../tools/hashline-core.js"'
-const SHARED_STUB_REGEX = /import\s*\{\s*getAdaptiveHashLength\s*,\s*hashlineAnchorHash\s*,\s*hashlineLineHash\s*\}\s*from\s*"\.\.\/tools\/hashline-core"\s*;?/
+const SHARED_STUB_FILE = 'import { getAdaptiveHashLength, hashlineAnchorHash, hashlineLineHash } from "../lib/hashline-core.js"'
+const SHARED_STUB_REGEX = /import\s*\{\s*getAdaptiveHashLength\s*,\s*hashlineAnchorHash\s*,\s*hashlineLineHash\s*\}\s*from\s*"\.\.\/lib\/hashline-core"\s*;?/
 
 const PERF_ITERATIONS = readPositiveIntEnv("BENCH_ITERATIONS", 200)
 const CORRECTNESS_FIXTURES = readPositiveIntEnv("BENCH_FIXTURES", 120)
@@ -216,7 +216,7 @@ async function loadFormatWithHashline() {
   await fs.mkdir(toolsDir, { recursive: true })
   await fs.mkdir(pluginsDir, { recursive: true })
 
-  await fs.copyFile(path.join(PROJECT_ROOT, "dist/.opencode/tools/hashline-core.js"), path.join(toolsDir, "hashline-core.js"))
+  await fs.copyFile(path.join(PROJECT_ROOT, "dist/.opencode/lib/hashline-core.js"), path.join(toolsDir, "hashline-core.js"))
 
   const originalShared = await fs.readFile(path.join(PROJECT_ROOT, "dist/.opencode/plugins/hashline-shared.js"), "utf8")
   const patchedShared = originalShared.replace(SHARED_STUB_REGEX, SHARED_STUB_FILE)

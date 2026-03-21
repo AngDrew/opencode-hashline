@@ -1,0 +1,4 @@
+This is a complete file replacement using the WRITE tool.
+MODIFIED line 1: Hashline resolved edit!
+New line 2: All previous content was replaced.
+New line 3: This proves the write tool works!

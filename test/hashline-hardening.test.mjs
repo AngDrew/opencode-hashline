@@ -9,13 +9,13 @@ import { pathToFileURL } from "node:url"
 import {
   computeFileRev as computeCoreFileRev,
   getAdaptiveHashLength,
-} from "../dist/.opencode/tools/hashline-core.js"
+} from "../dist/.opencode/lib/hashline-core.js"
 
 const PROJECT_ROOT = process.cwd()
 
-const SHARED_STUB_IMPORT = "../tools/hashline-core.js"
+const SHARED_STUB_IMPORT = "../lib/hashline-core.js"
 const SHARED_STUB_FILE = `import { getAdaptiveHashLength, hashlineAnchorHash, hashlineLineHash } from \"${SHARED_STUB_IMPORT}\"\n`
-const SHARED_STUB_REGEX = /import\s*\{\s*getAdaptiveHashLength\s*,\s*hashlineAnchorHash\s*,\s*hashlineLineHash\s*\}\s*from\s*"\.\.\/tools\/hashline-core"\s*;?/
+const SHARED_STUB_REGEX = /import\s*\{\s*getAdaptiveHashLength\s*,\s*hashlineAnchorHash\s*,\s*hashlineLineHash\s*\}\s*from\s*"\.\.\/lib\/hashline-core"\s*;?/
 
 async function loadSharedModule() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-shared-test-"))
@@ -26,7 +26,7 @@ async function loadSharedModule() {
   await fs.mkdir(pluginsDir, { recursive: true })
 
   await fs.copyFile(
-    path.join(PROJECT_ROOT, "dist/.opencode/tools/hashline-core.js"),
+    path.join(PROJECT_ROOT, "dist/.opencode/lib/hashline-core.js"),
     path.join(toolsDir, "hashline-core.js"),
   )
 

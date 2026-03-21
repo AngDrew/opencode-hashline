@@ -1,6 +1,9 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["hashline-routing"],
+  "permission": {
+    "*": "allow"
+  },
   "agent": {
     "hashline-test": {
       "description": "Minimal smoke-test agent for hashline tool overrides",

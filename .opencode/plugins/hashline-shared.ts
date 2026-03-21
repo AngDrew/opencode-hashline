@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
-import { computeFileRev, getAdaptiveHashLength, hashlineAnchorHash, hashlineLineHash } from "../tools/hashline-core.js"
+import { computeFileRev, getAdaptiveHashLength, hashlineAnchorHash, hashlineLineHash } from "../lib/hashline-core.js"
 export { computeFileRev }
 
 export interface HashlineRuntimeConfig {
@@ -151,9 +151,10 @@ function normalizeGlobPath(value: string): string {
   return value.replace(/\\/g, "/")
 }
 
-export function shouldExclude(filePath: string, patterns: string[]): boolean {
+export function shouldExclude(filePath: string, patterns?: string[]): boolean {
   const normalizedPath = normalizeGlobPath(filePath)
-  return patterns.some((pattern) => path.matchesGlob(normalizedPath, normalizeGlobPath(pattern)))
+  const effectivePatterns = Array.isArray(patterns) ? patterns : DEFAULT_EXCLUDE_PATTERNS
+  return effectivePatterns.some((pattern) => path.matchesGlob(normalizedPath, normalizeGlobPath(pattern)))
 }
 
 const textEncoder = new TextEncoder()
@@ -230,8 +231,18 @@ export function buildHashlineSystemInstruction(config: Pick<HashlineRuntimeConfi
   return [
     "## Hashline — Line Reference System",
     "",
+    "Hashline augments the native OpenCode file tools. Use only the native `read`, `edit`, and `write` tools by default.",
+    "Never call `hashline-core_*` tools or any internal helper tool names. Use only the native OpenCode tools `read`, `edit`, and `write`.",
+    "",
     `Annotated lines use \`${prefix}<line>#<hash>#<anchor>|<content>\` (example: \`${prefix}12#A3F#9BC|const value = 1\`).`,
-    `Read output also includes \`${prefix}REV:<hash>\`; pass that value as \`file_rev\`/\`fileRev\` when editing.`,
+    `Read output also includes \`${prefix}REV:<hash>\`; pass that exact full value as \`file_rev\`/\`fileRev\` when editing. Do not truncate it.`,
+    "",
+    "### Recommended Flow",
+    "",
+    "1. **Read** the file first to get hashline refs and fileRev",
+    "2. **Resolve** hashline operations using `hashline-resolve-edit_hashlineResolveEditTool` helper tool",
+    "3. **Edit** using native `edit` tool with the resolved oldString/newString",
+    "4. **Read again** to verify changes and get fresh refs",
     "",
     "### Read first (required before edits)",
     "```json",
@@ -239,23 +250,30 @@ export function buildHashlineSystemInstruction(config: Pick<HashlineRuntimeConfi
     "```",
     "Use refs exactly as returned, including the anchor hash.",
     "",
-    "### Edit with operations[]",
+    "### Resolve hashline operations (helper tool)",
+    "Use `hashline-resolve-edit_hashlineResolveEditTool` to convert hashline refs to native edit format:",
     "```json",
     "{",
-    '  "file_path": "src/app.ts",',
-    '  "file_rev": "1A2B3C4D",',
+    '  "filePath": "src/app.ts",',
+    '  "fileRev": "1A2B3C4D",',
     '  "operations": [',
     '    { "op": "replace", "ref": "12#A3F#9BC", "content": "const value = 2" },',
     '    { "op": "insert_after", "ref": "12#A3F#9BC", "content": "console.log(value)" }',
     "  ]",
     "}",
     "```",
+    "Returns JSON with `filePath`, `oldString`, `newString`, `fileRev` for native edit.",
     "",
-    "### Patch with patch_text JSON",
+    "### Edit with native edit tool",
+    "After resolving, use native `edit` with the returned values:",
     "```json",
-    '{ "patch_text": "{\\"file_path\\":\\"src/app.ts\\",\\"file_rev\\":\\"1A2B3C4D\\",\\"operations\\":[{\\"op\\":\\"replace\\",\\"ref\\":\\"12#A3F#9BC\\",\\"content\\":\\"const value = 2\\"}]}" }',
+    "{",
+    '  "file_path": "src/app.ts",',
+    '  "file_rev": "1A2B3C4D",',
+    '  "old_string": "...",',
+    '  "new_string": "..."',
+    "}",
     "```",
-    "`patch_text` must be valid JSON (array or object).",
     "",
     "### Write full file content",
     "```json",
@@ -263,18 +281,7 @@ export function buildHashlineSystemInstruction(config: Pick<HashlineRuntimeConfi
     "```",
     "`write` replaces the entire file.",
     "",
-    "### Edit single-operation mode",
-    "```json",
-    "{",
-    '  "file_path": "src/app.ts",',
-    '  "operation": "replace",',
-    '  "start_ref": "12#A3F#9BC",',
-    '  "end_ref": "14#B1C#4DE",',
-    '  "replacement": "const value = 3",',
-    '  "file_rev": "1A2B3C4D",',
-    '  "safe_reapply": true',
-    "}",
-    "```",
+    "If an edit fails because refs are stale or the revision changed, read the file again and use the newly returned refs and `REV` value.",
     "",
     "After any successful edit/patch/write, run read again before issuing new refs.",
   ].join("\n")
