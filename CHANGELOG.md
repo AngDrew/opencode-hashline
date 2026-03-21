@@ -4,9 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [1.3.2] - 2026-03-22
+## [1.4.0] - 2026-03-22
 
-### Changed
+### Added
 
 - Moved hashline-core from tools/ to lib/ to prevent auto-loading as a custom tool.
 - Created hashline-resolve-edit tool for hashline operations resolution.
