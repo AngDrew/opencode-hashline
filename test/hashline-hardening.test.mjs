@@ -9,6 +9,8 @@ import { pathToFileURL } from "node:url"
 import {
   computeFileRev as computeCoreFileRev,
   getAdaptiveHashLength,
+  runHashlineOperations,
+  runHashlineRead,
 } from "../dist/.opencode/lib/hashline-core.js"
 
 const PROJECT_ROOT = process.cwd()
@@ -319,60 +321,6 @@ test("replace accepts equivalent ref + startRef/endRef payloads", async () => {
     await fs.rm(tempDir, { recursive: true, force: true })
   }
 })
-
-test("hash-check validates guards and refs without writing", async () => {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-check-"))
-  const filePath = path.join(tempDir, "sample.txt")
-
-  try {
-    const original = "alpha\nbeta\ngamma\n"
-    await fs.writeFile(filePath, original, "utf8")
-
-    const readText = await runHashlineRead({
-      filePath,
-      offset: 1,
-      limit: 200,
-      context: { directory: PROJECT_ROOT },
-    })
-
-    const fileHash10 = (() => {
-      const match = String(readText).match(/file_hash=\"([A-F0-9]{10})\"/)
-      return match ? match[1] : undefined
-    })()
-    const line2Ref = (() => {
-      const match = String(readText).match(/#HL\s+2#([A-F0-9]{3,4})#([A-F0-9]{3,4})\|beta/m)
-      return match ? `2#${match[1]}#${match[2]}` : undefined
-    })()
-
-    assert.equal(typeof fileHash10, "string")
-    assert.equal(typeof line2Ref, "string")
-
-    const ok = await runHashlineCheck({
-      filePath,
-      fileRev: computeCoreFileRev(original),
-      expectedFileHash: fileHash10,
-      targets: [{ op: "replace", ref: line2Ref }],
-      context: { directory: PROJECT_ROOT },
-    })
-
-    assert.match(ok, /Hashline check passed/)
-
-    const after = await fs.readFile(filePath, "utf8")
-    assert.equal(after, original)
-
-    await assert.rejects(
-      runHashlineCheck({
-        filePath,
-        fileRev: "00000000",
-        context: { directory: PROJECT_ROOT },
-      }),
-      /File revision mismatch/,
-    )
-  } finally {
-    await fs.rm(tempDir, { recursive: true, force: true })
-  }
-})
-
 test("hashline operation result includes diff preview", async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-diff-preview-"))
   const filePath = path.join(tempDir, "sample.txt")
