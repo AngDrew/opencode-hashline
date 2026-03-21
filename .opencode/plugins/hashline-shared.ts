@@ -246,9 +246,14 @@ export function buildHashlineSystemInstruction(config: Pick<HashlineRuntimeConfi
     "",
     "### Read first (required before edits)",
     "```json",
-    '{ "file_path": "src/app.ts", "offset": 1, "limit": 200 }',
+    '{ "filePath": "src/app.ts", "offset": 1, "limit": 200 }',
     "```",
     "Use refs exactly as returned, including the anchor hash.",
+    "### Optional preflight check (recommended before edit/patch/write)",
+    "```json",
+    '{ "filePath": "src/app.ts", "fileRev": "1A2B3C4D", "expectedFileHash": "ABCDEF1234", "targets": [{ "op": "replace", "ref": "12#A3F#9BC" }] }',
+    "```",
+    "Use hash-check for low-token validation of refs and guards before writing.",
     "",
     "### Resolve hashline operations (helper tool)",
     "Use `hashline-resolve-edit_hashlineResolveEditTool` to convert hashline refs to native edit format:",
@@ -277,13 +282,13 @@ export function buildHashlineSystemInstruction(config: Pick<HashlineRuntimeConfi
     "",
     "### Write full file content",
     "```json",
-    '{ "file_path": "src/app.ts", "file_rev": "1A2B3C4D", "content": "full file contents" }',
+    '{ "filePath": "src/app.ts", "fileRev": "1A2B3C4D", "content": "full file contents" }',
     "```",
     "`write` replaces the entire file.",
     "",
     "If an edit fails because refs are stale or the revision changed, read the file again and use the newly returned refs and `REV` value.",
     "",
-    "After any successful edit/patch/write, run read again before issuing new refs.",
+    "After any successful edit/patch/write, run read again before issuing new refs."
   ].join("\n")
 }
 

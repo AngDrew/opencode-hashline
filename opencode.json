@@ -6,12 +6,13 @@
   },
   "agent": {
     "hashline-test": {
-      "description": "Minimal smoke-test agent for hashline tool overrides",
+      "description": "Minimal smoke-test agent for hashline-backed read/edit/patch/write tools",
       "mode": "primary",
       "model": "proxy/gpt-5.1-codex-mini",
       "permission": {
         "*": "deny",
         "read": "allow",
+        "hash-check": "allow",
         "edit": "allow",
         "patch": "allow",
         "write": "allow",

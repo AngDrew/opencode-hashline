@@ -1,0 +1,22 @@
+{
+  "performance": {
+    "sizes": [50, 500, 5000],
+    "operations": ["replace", "insert_after", "replace_range", "set_file"],
+    "warmup": 20,
+    "iterations": 120
+  },
+  "correctness": [
+    { "id": "replace-success", "scenario": "replace_line_success", "expect": "pass" },
+    { "id": "missing-ref-fails", "scenario": "missing_ref_fails", "expect": "fail" },
+    { "id": "stale-strict-fails", "scenario": "stale_ref_strict_fails", "expect": "fail" },
+    { "id": "stale-safe-reapply-pass", "scenario": "stale_ref_safe_reapply_pass", "expect": "pass" },
+    { "id": "filerev-rev8-pass", "scenario": "filerev_rev8_pass", "expect": "pass" },
+    { "id": "filerev-filehash10-pass", "scenario": "filerev_filehash10_pass", "expect": "pass" },
+    { "id": "filerev-mismatch-fails", "scenario": "filerev_mismatch_fails", "expect": "fail" }
+  ],
+  "gates": {
+    "correctnessPassRate": 100,
+    "wrongToolRate": 0,
+    "maxP95RegressionPercent": 20
+  }
+}

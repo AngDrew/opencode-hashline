@@ -3,7 +3,7 @@ import { HashlineRouting as routingPlugin } from "../.opencode/plugins/hashline-
 import { hashlineResolveEditTool } from "../.opencode/tools/hashline-resolve-edit"
 
 const hashlinePlugin: Plugin = async (input) => {
-  const routingHooks = await routingPlugin(input)
+  const routingHooks = await routingPlugin(input as unknown as Parameters<typeof routingPlugin>[0])
 
   return {
     ...routingHooks,

@@ -1,4 +1,4 @@
-# Hashline toolset for OpenCode
+# Hashline for OpenCode
 
 [![CI](https://github.com/AngDrew/opencode-hashline/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AngDrew/opencode-hashline/actions/workflows/ci.yml)
 [![Publish to npm](https://github.com/AngDrew/opencode-hashline/actions/workflows/publish.yml/badge.svg)](https://github.com/AngDrew/opencode-hashline/actions/workflows/publish.yml)
@@ -6,203 +6,167 @@
 [![npm downloads](https://img.shields.io/npm/dm/%40angdrew/opencode-hashline-plugin?logo=npm)](https://www.npmjs.com/package/%40angdrew/opencode-hashline-plugin)
 [![npm license](https://img.shields.io/npm/l/%40angdrew/opencode-hashline-plugin)](https://www.npmjs.com/package/%40angdrew/opencode-hashline-plugin)
 
-This repository provides hashline-based OpenCode tool overrides for stable, line-referenced file reads and edits.
+`@angdrew/opencode-hashline-plugin` adds hashline-aware file tools to OpenCode. It replaces fuzzy, line-number-based edits with stable line references so agents can read, edit, patch, and rewrite files more safely across repeated tool calls.
 
-It is both:
-- a publishable OpenCode plugin package (`@angdrew/opencode-hashline-plugin`), and
-- a local `.opencode/` runtime implementation of tools/plugins.
+## What it does
 
-## What it replaces
+- Reverts tool names to built-in `read`, `edit`, `patch`, and `write` (while keeping `hash-check`) so OpenCode can render diffs closer to native behavior.
+- Returns stable line refs and a file revision marker instead of relying on raw line numbers.
+- Lets callers preflight refs and concurrency guards with `hash-check` before spending tokens on full edits.
+- Applies edits against exact refs, which helps prevent stale or ambiguous changes.
+- Adds inline diff previews and structured diff metadata for edit, patch, and write results.
+- Normalizes common built-in/snake_case payload aliases (including nested `operations[]` and `patchText` object keys) so GPT-generated tool calls bridge cleanly to canonical hashline arguments.
 
-Drop-in overrides are provided for built-in tool names:
+## Install
 
-- `read` (and `view` normalized to `read` via plugin)
-- `edit`
-- `patch`
-- `write`
+Install the package in the workspace where OpenCode runs:
 
-OpenCode loads tools from `.opencode/tools/` and allows collisions with built-in names; custom tools take precedence according to OpenCode runtime ordering.
-
-## Tools provided
-
-- `read`: returns hash-annotated output (`<prefix>REV:...` + `<prefix><line>#<hash>#<anchor>|...`; default prefix is `;;;`)
-- `edit`: supports both `operations[]` batch mode and single-operation mode (`operation` + `startRef`, optional `endRef`, `safeReapply`)
-- `patch`: accepts `patchText` as JSON payload (array of ops or object with file+ops)
-- `write`: full-file replacement through `set_file`
-
-## Files
-
-### Package entrypoint
-- `src/index.ts` — exports plugin wiring for routing + tool overrides
-
-### OpenCode runtime implementation
-- `.opencode/tools/hashline-core.ts` — hashing, parsing, ref validation, file I/O, operation engine
-- `.opencode/tools/read.ts` — hashline reader
-- `.opencode/tools/edit.ts` — hashline operations (batch + single-operation modes)
-- `.opencode/tools/patch.ts` — patch bridge using JSON operation payloads
-- `.opencode/tools/write.ts` — full file replace through `set_file`
-
-- `.opencode/plugins/hashline-routing.ts` — tool alias + argument normalization (`view -> read`)
-- `.opencode/plugins/hashline-hooks.ts` — read annotation, edit arg normalization/stripping, system instruction injection, chat file-part annotation
-- `.opencode/plugins/hashline-shared.ts` — shared config, formatting, cache, exclusion handling, runtime helpers
-- `opencode.json` — registers plugin `hashline-routing` and includes sample `hashline-test` agent
-
-## Read output contract
-
-`read` returns text in this shape:
-
-```text
-<hashline-file path="..." file_hash="..." total_lines="..." start_line="..." shown_until="...">
-# format: <line>#<hash>#<anchor>|<content>
-;;;REV:72C4946C
-;;;12#A3F#1B2|const x = 1
-;;;13#9BC#3D4|return x
-</hashline-file>
+```bash
+npm install -D @angdrew/opencode-hashline-plugin
 ```
 
-References remain valid while referenced line content is unchanged.
-
-## Edit operation contract
-
-Batch `edit` mode:
+Add the plugin to `opencode.json`:
 
 ```json
 {
-  "filePath": "src/example.ts",
-  "expectedFileHash": "AB12CD34EF",
-  "fileRev": "72C4946C",
-  "operations": [
-    { "op": "replace", "startRef": "13#9BC#3D4", "content": "return x + 1" },
-    { "op": "insert_after", "startRef": "12#A3F#1B2", "content": "console.log(x)" }
-  ]
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["@angdrew/opencode-hashline-plugin"]
 }
 ```
 
-Supported ops:
+If you use per-agent permissions, allow the hashline-backed file tools explicitly:
+
+```json
+{
+  "agent": {
+    "hashline": {
+      "permission": {
+        "read": "allow",
+        "hash-check": "allow",
+        "edit": "allow",
+        "patch": "allow",
+        "write": "allow"
+      }
+    }
+  }
+}
+```
+
+## How it works
+
+1. `read` returns annotated lines in the form `<line>#<hash>#<anchor>|<content>` and includes a `REV:<hash>` marker for the current file revision.
+2. `hash-check` can validate refs, `fileRev`, and `expectedFileHash` before a write.
+3. `edit` and `patch` target those refs, while `write` replaces the full file when a rewrite is simpler.
+4. `fileRev` and `expectedFileHash` can reject stale writes when the file changed after the last read.
+5. `edit`, `patch`, and `write` return inline diff previews and structured diff metadata.
+6. After every successful edit, patch, or write, read the file again before sending more refs.
+
+Example `read` output:
+
+```text
+const x = 1
+return x
+```
+
+Typical flow:
+
+```text
+read -> capture refs + fileRev -> optional hash-check -> edit/patch/write -> read again
+```
+
+## Tools
+
+| Tool | Use it for | Notes |
+| --- | --- | --- |
+| `read` | Read a file and collect stable refs | Output is hash-annotated; default prefix is `;;;` |
+| `hash-check` | Preflight refs and concurrency guards | Validates `fileRev`, `expectedFileHash`, and targets without writing |
+| `edit` | Apply targeted edits against refs | Supports `operations[]` batch mode and single-operation mode |
+| `patch` | Send a JSON patch payload | Uses the same operation engine as `edit`; not a unified diff tool |
+| `write` | Replace an entire file | Best when a full rewrite is simpler than incremental edits |
+
+Common edit operations:
 
 - `replace`
 - `delete`
 - `insert_before`
 - `insert_after`
-- `replace_range` (`startRef` + `endRef`)
+- `replace_range`
 - `set_file`
 
-Single-operation `edit` mode:
+## Example edit payload
 
 ```json
 {
-  "filePath": "src/example.ts",
-  "operation": "replace",
-  "startRef": "12#A3F#1B2",
-  "endRef": "13#9BC#3D4",
-  "replacement": "const value = 2",
+  "filePath": "src/app.ts",
   "fileRev": "72C4946C",
-  "safeReapply": true
+  "operations": [
+    { "op": "replace", "ref": "12#A3F#1B2", "content": "const value = 2" },
+    { "op": "insert_after", "ref": "12#A3F#1B2", "content": "console.log(value)" }
+  ]
 }
 ```
 
-Notes:
-- `operation` supports: `replace`, `delete`, `insert_before`, `insert_after`
-- Use `startRef` as the primary target key
-- `endRef` is optional; when present, operations apply across the range
-- `replacement` (or `content`) is required for `replace`, `insert_before`, and `insert_after`
-- `safeReapply` can be used in both batch and single-operation modes
-- Legacy snake_case aliases are accepted only via routing compatibility; they are not canonical.
-
-### Migration notes
-
-- `hashline_edit` has been merged into `edit` single-operation mode.
-- Legacy `old_string` / `new_string` in `edit` has been removed.
-- Use hashline refs from `read` output and call `edit` with either:
-  - `operations[]` (batch), or
-  - `operation` + `startRef` (+ optional `endRef`).
-
-## Patch contract
-
-`patch` expects `patchText` as JSON (not unified diff). It supports:
-
-1) an array of operations, or
-2) an object with `{ filePath, operations, expectedFileHash, fileRev }`
-
-Example:
+## Example preflight check payload
 
 ```json
 {
-  "patchText": "{\"filePath\":\"src/example.ts\",\"expectedFileHash\":\"AB12CD34EF\",\"fileRev\":\"72C4946C\",\"operations\":[{\"op\":\"delete\",\"startRef\":\"20#F1A#8BC\"}]}"
+  "filePath": "src/app.ts",
+  "fileRev": "72C4946C",
+  "expectedFileHash": "A1B2C3D4E5",
+  "targets": [
+    { "op": "replace", "ref": "12#A3F#1B2" }
+  ]
 }
 ```
 
-## Configuration (`opencode-hashline.json`)
+## Benchmarking
 
-Runtime behavior can be configured with JSON:
+Use the benchmark harness in `bench/`:
 
-- Global: `~/.config/opencode/opencode-hashline.json`
-- Project: `<project>/opencode-hashline.json`
-
-Supported keys:
-
-- `exclude` (`string[]`) — glob patterns to skip annotation/edit access checks
-- `maxFileSize` (`number`) — max bytes; `0` disables size limit
-- `cacheSize` (`number`) — annotation cache entry count
-- `prefix` (`string | false`) — default `";;;"`; set `false` for no prefix
-- `fileRev` (`boolean`) — include `<prefix>REV:<hash>` in annotated output
-- `safeReapply` (`boolean`) — default behavior for `edit` safe-reapply handling
-
-Default values:
-
-```json
-{
-  "maxFileSize": 1048576,
-  "cacheSize": 100,
-  "prefix": ";;;",
-  "fileRev": true,
-  "safeReapply": false
-}
+```bash
+npm run bench
 ```
 
-## Safety model
+Optional overrides:
 
-- Line refs use adaptive hash length (3 chars for files <= 4096 lines, 4 chars otherwise).
-- Optional `expectedFileHash` and `fileRev` reject stale edits when file contents changed.
-- Overlapping operations in one request are rejected.
-- Config sanitization applies validation and safe bounds to runtime-config values.
+- `BENCH_WARMUP` (default from `bench/cases.json`: `20`)
+- `BENCH_ITERATIONS` (default from `bench/cases.json`: `120`)
 
-## Development
+`bench/cases.json` controls:
 
-Requirements:
-- Node.js 22 (matches CI)
+- performance matrix (`sizes`, `operations`)
+- correctness scenarios and expected outcomes
+- gate thresholds (`correctnessPassRate`, `wrongToolRate`, `maxP95RegressionPercent`)
 
-Commands:
-- Install: `npm ci`
-- Build: `npm run build` (outputs `dist/`, which is gitignored)
-- Test: `npm test` (requires built `dist/` artifacts)
-- Benchmark: `npm run bench` (requires built `dist/` artifacts)
-- Dry-run package contents: `npm run pack:check`
+For comparison with the previous benchmark script:
 
-## CI
+```bash
+npm run bench:legacy
+```
 
-GitHub Actions workflow (`.github/workflows/ci.yml`) runs install + build + tests on push and pull requests.
+## Repository layout
 
-## Auto publish to npm
+- `src/index.ts` - plugin entrypoint that registers the tool handlers.
+- `.opencode/tools/` - hashline tool implementations.
+- `.opencode/plugins/` - routing and compatibility hooks used by the plugin.
+- `bench/` - benchmark harness (`runner.mjs`) and scenario matrix (`cases.json`).
+- `scripts/benchmark.mjs` - previous benchmark runner retained as `npm run bench:legacy`.
 
-GitHub Actions workflow (`.github/workflows/publish.yml`) publishes to npm automatically when you push a version tag.
+## Contributing
 
-Trigger:
-- Push tags matching `v*` (for example `v1.0.1`)
+```bash
+npm ci
+npm run build
+npm test
+npm run bench
+npm run bench:legacy
+npm run pack:check
+```
 
-Required environment secret (environment: `sikrit`):
-- `NPM_TOKEN`: npm access token with publish permissions for `@angdrew/opencode-hashline-plugin`
+- Open an issue or PR if you find a stale-ref edge case, routing bug, or tool contract gap.
+- Keep changes focused and update docs or tests when behavior changes.
+- CI runs on Node.js 22.
 
-Release flow:
-1. Update `package.json` version to the release version (without `v`, e.g. `1.0.1`)
-2. Commit and push changes
-3. Create and push tag with `v` prefix:
-   - `git tag -a v1.0.1 -m "Release v1.0.1"`
-   - `git push origin v1.0.1`
+## License
 
-The workflow validates that tag version and `package.json` version match, then runs `npm publish --provenance --access public`.
-
-## Notes
-
-- Local Node sanity checks can fail for tool wrappers if `@opencode-ai/plugin` is not installed in the directory. These wrappers are intended for OpenCode runtime.
-- Core module (`hashline-core.ts`) can be imported standalone for logic validation.
+MIT

@@ -2,41 +2,86 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { createHashlineHooks } from "./hashline-hooks"
 import { HashlineAnnotationCache, resolveHashlineConfig } from "./hashline-shared"
 
-const known = new Set(["read", "view", "edit", "patch", "write"])
+const HASHLINE_TOOLS = new Set(["read", "edit", "patch", "write", "hash-check"])
 
-function normalizeName(name: string): string {
-  return name === "view" ? "read" : name
+function canonicalToolName(name: string): string {
+  const lower = name.toLowerCase()
+  const splitIndex = lower.lastIndexOf(".")
+  return splitIndex >= 0 ? lower.slice(splitIndex + 1) : lower
 }
 
-function normalizeArgs(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
-  const out = { ...args }
+function setStringAlias(args: Record<string, unknown>, canonicalKey: string, aliasKey: string): void {
+  const canonical = args[canonicalKey]
+  const alias = args[aliasKey]
+  const canonicalMissing = typeof canonical !== "string" || canonical.trim().length === 0
+  if (typeof alias === "string" && alias.trim().length > 0 && canonicalMissing) {
+    args[canonicalKey] = alias
+  }
+}
+
+function setBooleanAlias(args: Record<string, unknown>, canonicalKey: string, aliasKey: string): void {
+  const canonical = args[canonicalKey]
+  const alias = args[aliasKey]
+  if (typeof alias === "boolean" && typeof canonical !== "boolean") {
+    args[canonicalKey] = alias
+  }
+}
+
+function normalizeOperationAliasesInPlace(operation: unknown): void {
+  if (!operation || typeof operation !== "object" || Array.isArray(operation)) {
+    return
+  }
+
+  const op = operation as Record<string, unknown>
+  setStringAlias(op, "startRef", "start_ref")
+  setStringAlias(op, "endRef", "end_ref")
+  setStringAlias(op, "content", "replacement")
+}
+function normalizeArgsInPlace(toolName: string, args: Record<string, unknown>): void {
+  if (toolName === "read") {
+    setStringAlias(args, "filePath", "file_path")
+    return
+  }
 
   if (toolName === "edit") {
-    if (typeof out.file_path === "string" && typeof out.filePath !== "string") out.filePath = out.file_path
-    if (typeof out.start_ref === "string" && typeof out.startRef !== "string") out.startRef = out.start_ref
-    if (typeof out.end_ref === "string" && typeof out.endRef !== "string") out.endRef = out.end_ref
-    if (typeof out.safe_reapply === "boolean" && typeof out.safeReapply !== "boolean") out.safeReapply = out.safe_reapply
-    if (typeof out.expected_file_hash === "string" && typeof out.expectedFileHash !== "string") out.expectedFileHash = out.expected_file_hash
-    if (typeof out.file_rev === "string" && typeof out.fileRev !== "string") out.fileRev = out.file_rev
-    if (typeof out.dry_run === "boolean" && typeof out.dryRun !== "boolean") out.dryRun = out.dry_run
+    setStringAlias(args, "filePath", "file_path")
+    setStringAlias(args, "startRef", "start_ref")
+    setStringAlias(args, "endRef", "end_ref")
+    setBooleanAlias(args, "safeReapply", "safe_reapply")
+    setStringAlias(args, "expectedFileHash", "expected_file_hash")
+    setStringAlias(args, "fileRev", "file_rev")
+    setBooleanAlias(args, "dryRun", "dry_run")
+    const operations = args.operations
+    if (Array.isArray(operations)) {
+      for (const operation of operations) {
+        normalizeOperationAliasesInPlace(operation)
+      }
+    }
+    return
   }
 
   if (toolName === "patch") {
-    if (typeof out.patch_text === "string" && typeof out.patchText !== "string") out.patchText = out.patch_text
-    if (typeof out.file_path === "string" && typeof out.filePath !== "string") out.filePath = out.file_path
-    if (typeof out.expected_file_hash === "string" && typeof out.expectedFileHash !== "string") out.expectedFileHash = out.expected_file_hash
-    if (typeof out.file_rev === "string" && typeof out.fileRev !== "string") out.fileRev = out.file_rev
-    if (typeof out.dry_run === "boolean" && typeof out.dryRun !== "boolean") out.dryRun = out.dry_run
+    setStringAlias(args, "patchText", "patch_text")
+    setStringAlias(args, "filePath", "file_path")
+    setStringAlias(args, "expectedFileHash", "expected_file_hash")
+    setStringAlias(args, "fileRev", "file_rev")
+    setBooleanAlias(args, "dryRun", "dry_run")
+    return
   }
 
   if (toolName === "write") {
-    if (typeof out.file_path === "string" && typeof out.filePath !== "string") out.filePath = out.file_path
-    if (typeof out.expected_file_hash === "string" && typeof out.expectedFileHash !== "string") out.expectedFileHash = out.expected_file_hash
-    if (typeof out.file_rev === "string" && typeof out.fileRev !== "string") out.fileRev = out.file_rev
-    if (typeof out.dry_run === "boolean" && typeof out.dryRun !== "boolean") out.dryRun = out.dry_run
+    setStringAlias(args, "filePath", "file_path")
+    setStringAlias(args, "expectedFileHash", "expected_file_hash")
+    setStringAlias(args, "fileRev", "file_rev")
+    setBooleanAlias(args, "dryRun", "dry_run")
   }
 
-  return out
+  if (toolName === "hash-check") {
+    setStringAlias(args, "filePath", "file_path")
+    setStringAlias(args, "expectedFileHash", "expected_file_hash")
+    setStringAlias(args, "fileRev", "file_rev")
+    setBooleanAlias(args, "safeReapply", "safe_reapply")
+  }
 }
 
 export const HashlineRouting: Plugin = async (input) => {
@@ -48,16 +93,17 @@ export const HashlineRouting: Plugin = async (input) => {
   return {
     ...hooks,
     "tool.execute.before": async (input, output) => {
-      const name = normalizeName(input.tool)
-      if (!known.has(name)) {
+      const name = canonicalToolName(input.tool)
+      if (!HASHLINE_TOOLS.has(name)) {
         if (hooks["tool.execute.before"]) {
           await hooks["tool.execute.before"](input, output)
         }
         return
       }
 
-      const nextArgs = normalizeArgs(name, (output.args ?? {}) as Record<string, unknown>)
-      output.args = nextArgs
+      if (output.args && typeof output.args === "object" && !Array.isArray(output.args)) {
+        normalizeArgsInPlace(name, output.args as Record<string, unknown>)
+      }
 
       if (hooks["tool.execute.before"]) {
         await hooks["tool.execute.before"](input, output)

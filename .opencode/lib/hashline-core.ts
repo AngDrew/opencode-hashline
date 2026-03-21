@@ -73,6 +73,18 @@ interface ResolvedChange {
   label: string
 }
 
+interface HashlineMetadataInput {
+  title?: string
+  metadata?: {
+    [key: string]: any
+  }
+}
+
+interface HashlineToolContext {
+  directory?: string
+  metadata?: (input: HashlineMetadataInput) => void
+}
+
 function hashText(text: string, length = 10): string {
   return createHash("sha1").update(text, "utf8").digest("hex").slice(0, length).toUpperCase()
 }
@@ -97,6 +109,32 @@ export function hashlineAnchorHash(
 export function computeFileRev(raw: string): string {
   const normalized = raw.includes("\r\n") ? raw.replace(/\r\n/g, "\n") : raw
   return hashText(normalized, 8)
+}
+
+function assertFileRevisionMatches(snapshot: FileSnapshot, filePath: string, providedFileRev?: string): void {
+  if (typeof providedFileRev !== "string") {
+    return
+  }
+
+  const expectedToken = providedFileRev.trim().toUpperCase()
+  if (expectedToken.length === 0) {
+    return
+  }
+
+  const actualRev = computeFileRev(snapshot.raw)
+  if (expectedToken === actualRev) {
+    return
+  }
+
+  // Compatibility hardening for smaller models: they sometimes pass `file_hash`
+  // (10 chars from the <hashline-file ... file_hash="..."> header) into `fileRev`.
+  if (expectedToken === snapshot.fileHash) {
+    return
+  }
+
+  throw new Error(
+    `File revision mismatch for ${filePath}. Expected ${expectedToken}, actual ${actualRev}. Read the file again before editing.`,
+  )
 }
 
 export function firstNonEmptyString(...values: Array<string | undefined>): string | undefined {
@@ -304,6 +342,27 @@ function normalizeOperations(operations: HashlineOperation[]): HashlineOperation
   }))
 }
 
+function areEquivalentRefs(a: string, b: string): boolean {
+  try {
+    const parsedA = parseLineRef(a)
+    const parsedB = parseLineRef(b)
+
+    if (parsedA.lineNumber !== parsedB.lineNumber || parsedA.hash !== parsedB.hash) {
+      return false
+    }
+
+    // If both include anchors, they must also match. If only one side has an
+    // anchor, treat them as equivalent (same line/hash target).
+    if (parsedA.anchor && parsedB.anchor && parsedA.anchor !== parsedB.anchor) {
+      return false
+    }
+
+    return true
+  } catch {
+    return a.trim() === b.trim()
+  }
+}
+
 function resolveRefRange(params: {
   snapshot: FileSnapshot
   ref?: string
@@ -312,17 +371,21 @@ function resolveRefRange(params: {
   safeReapply: boolean
   label: string
 }): { start: { index: number; lineNumber: number }; end: { index: number; lineNumber: number } } {
-  if (params.ref && params.startRef) {
+  const ref = params.ref?.trim()
+  const startRef = params.startRef?.trim()
+  const endRef = params.endRef?.trim()
+
+  if (ref && startRef && !areEquivalentRefs(ref, startRef)) {
     throw new Error(`${params.label} accepts either ref or startRef/endRef, not both`)
   }
 
-  const baseStartRef = params.startRef ?? params.ref
+  const baseStartRef = startRef ?? ref
   if (!baseStartRef) {
     throw new Error(`${params.label} requires ref or startRef`)
   }
 
   let start = resolveRef(baseStartRef, params.snapshot, params.safeReapply)
-  let end = params.endRef ? resolveRef(params.endRef, params.snapshot, params.safeReapply) : start
+  let end = endRef ? resolveRef(endRef, params.snapshot, params.safeReapply) : start
 
   if (start.index > end.index) {
     const first = start
@@ -568,6 +631,172 @@ async function writeSnapshot(snapshot: FileSnapshot): Promise<void> {
   await fs.writeFile(snapshot.absolutePath, snapshot.raw, "utf8")
 }
 
+const MAX_DIFF_PREVIEW_HUNKS = 24
+const MAX_DIFF_PREVIEW_LINES = 240
+const MAX_DIFF_PREVIEW_LINE_LENGTH = 500
+
+function truncateDiffLine(line: string): string {
+  return line.length > MAX_DIFF_PREVIEW_LINE_LENGTH ? `${line.slice(0, MAX_DIFF_PREVIEW_LINE_LENGTH)}…` : line
+}
+
+function buildOperationDiffLines(
+  snapshot: FileSnapshot,
+  changes: ResolvedChange[],
+  params: {
+    fenced: boolean
+    filePath?: string
+    maxHunks: number
+    maxLines: number
+    truncationNotice: string
+  },
+): string[] | undefined {
+  if (changes.length === 0) {
+    return undefined
+  }
+
+  const sorted = [...changes].sort((a, b) => {
+    if (a.spliceStart !== b.spliceStart) {
+      return a.spliceStart - b.spliceStart
+    }
+    return a.order - b.order
+  })
+
+  const lines: string[] = []
+  let emitted = 0
+  let delta = 0
+  let truncated = false
+  const maxHunks = Math.min(sorted.length, params.maxHunks)
+
+  if (params.fenced) {
+    lines.push("```diff")
+  }
+
+  if (params.filePath) {
+    const normalizedPath = params.filePath.replace(/\\/g, "/").replace(/^\/+/, "")
+    lines.push(`--- a/${normalizedPath}`, `+++ b/${normalizedPath}`)
+  }
+
+  for (let idx = 0; idx < maxHunks; idx += 1) {
+    const change = sorted[idx]
+    const removed = snapshot.lines.slice(change.spliceStart, change.spliceStart + change.deleteCount)
+    const added = change.insertLines
+
+    const beforeStart = change.spliceStart + 1
+    const afterStart = change.spliceStart + 1 + delta
+    lines.push(`@@ -${beforeStart},${removed.length} +${afterStart},${added.length} @@ ${change.label}`)
+
+    for (const removedLine of removed) {
+      if (emitted >= params.maxLines) {
+        truncated = true
+        break
+      }
+      lines.push(`-${truncateDiffLine(removedLine)}`)
+      emitted += 1
+    }
+
+    if (truncated) {
+      break
+    }
+
+    for (const addedLine of added) {
+      if (emitted >= params.maxLines) {
+        truncated = true
+        break
+      }
+      lines.push(`+${truncateDiffLine(addedLine)}`)
+      emitted += 1
+    }
+
+    if (truncated) {
+      break
+    }
+
+    delta += added.length - removed.length
+  }
+
+  if (sorted.length > maxHunks) {
+    truncated = true
+  }
+
+  if (truncated) {
+    lines.push(params.truncationNotice)
+  }
+
+  if (params.fenced) {
+    lines.push("```")
+  }
+
+  return lines
+}
+
+function buildOperationDiffPreview(snapshot: FileSnapshot, changes: ResolvedChange[]): string | undefined {
+  const lines = buildOperationDiffLines(snapshot, changes, {
+    fenced: true,
+    maxHunks: MAX_DIFF_PREVIEW_HUNKS,
+    maxLines: MAX_DIFF_PREVIEW_LINES,
+    truncationNotice: "# …diff preview truncated",
+  })
+  return lines?.join("\n")
+}
+
+function buildOperationUnifiedDiff(snapshot: FileSnapshot, changes: ResolvedChange[], filePath: string): string | undefined {
+  const lines = buildOperationDiffLines(snapshot, changes, {
+    fenced: false,
+    filePath,
+    maxHunks: 120,
+    maxLines: 2000,
+    truncationNotice: "# diff truncated",
+  })
+  return lines?.join("\n")
+}
+
+function emitHashlineOperationMetadata(params: {
+  filePath: string
+  dryRun: boolean
+  before: FileSnapshot
+  after: FileSnapshot
+  operations: number
+  additions: number
+  removals: number
+  existed: boolean
+  diff?: string
+  diffPreview?: string
+  context?: HashlineToolContext
+}): void {
+  params.context?.metadata?.({
+    title: `Hashline ${params.dryRun ? "preview" : "edit"} ${params.filePath}`,
+    metadata: {
+      filepath: params.filePath,
+      exists: params.existed,
+      diff: params.diff,
+      diffPreview: params.diffPreview,
+      filediff: {
+        additions: params.additions,
+        deletions: params.removals,
+      },
+      files: [
+        {
+          filepath: params.filePath,
+          exists: params.existed,
+          diff: params.diff,
+          filediff: {
+            additions: params.additions,
+            deletions: params.removals,
+          },
+        },
+      ],
+      hashline: {
+        dryRun: params.dryRun,
+        operations: params.operations,
+        fileHashBefore: params.before.fileHash,
+        fileHashAfter: params.after.fileHash,
+        fileRevBefore: computeFileRev(params.before.raw),
+        fileRevAfter: computeFileRev(params.after.raw),
+      },
+    },
+  })
+}
+
 function formatEditResult(params: {
   filePath: string
   mode: "hashline" | "legacy"
@@ -577,14 +806,21 @@ function formatEditResult(params: {
   operations: number
   additions: number
   removals: number
+  diffPreview?: string
 }): string {
-  return [
+  const body = [
     `Hashline ${params.mode} edit ${params.dryRun ? "(dry run) " : ""}completed for ${params.filePath}.`,
     `File hash: ${params.before.fileHash} -> ${params.after.fileHash}`,
     `Operations: ${params.operations}; additions: ${params.additions}; removals: ${params.removals}`,
     `Lines: ${params.before.lines.length} -> ${params.after.lines.length}`,
-    "Read the file again before issuing additional hashline refs.",
-  ].join("\n")
+  ]
+
+  if (params.diffPreview) {
+    body.push("Diff preview:", params.diffPreview)
+  }
+
+  body.push("Read the file again before issuing additional hashline refs.")
+  return body.join("\n")
 }
 
 interface HashlineExecutionParams {
@@ -710,21 +946,15 @@ export async function runHashlineOperationsDetailed(params: HashlineExecutionPar
     )
   }
 
-  if (params.fileRev) {
-    const expectedRev = params.fileRev.toUpperCase()
-    const actualRev = computeFileRev(snapshot.raw)
-    if (actualRev !== expectedRev) {
-      throw new Error(
-        `File revision mismatch for ${params.filePath}. Expected ${expectedRev}, actual ${actualRev}. Read the file again before editing.`,
-      )
-    }
-  }
+  assertFileRevisionMatches(snapshot, params.filePath, params.fileRev)
 
   const changes = resolveChanges(snapshot, normalizedOps, Boolean(params.safeReapply))
   validateChangeConflicts(changes)
 
   const applied = applyChanges(snapshot, changes)
   const after = snapshotFromLines(snapshot, applied.lines)
+  const diffPreview = buildOperationDiffPreview(snapshot, changes)
+  const diff = buildOperationUnifiedDiff(snapshot, changes, params.filePath)
 
   if (!params.dryRun) {
     await writeSnapshot(after)
@@ -739,6 +969,7 @@ export async function runHashlineOperationsDetailed(params: HashlineExecutionPar
     operations: normalizedOps.length,
     additions: applied.additions,
     removals: applied.removals,
+    diffPreview,
   })
 }
 
@@ -766,19 +997,14 @@ export async function runLegacyEdit(params: {
     )
   }
 
-  if (params.fileRev) {
-    const expectedRev = params.fileRev.toUpperCase()
-    const actualRev = computeFileRev(snapshot.raw)
-    if (actualRev !== expectedRev) {
-      throw new Error(
-        `File revision mismatch for ${params.filePath}. Expected ${expectedRev}, actual ${actualRev}. Read the file again before editing.`,
-      )
-    }
-  }
+  assertFileRevisionMatches(snapshot, params.filePath, params.fileRev)
 
   const oldString = params.oldString ?? ""
   const newString = params.newString ?? ""
+  const oldLines = splitContentToLines(oldString)
+  const newLines = splitContentToLines(newString)
   let nextRaw = snapshot.raw
+  let start = 0
 
   if (oldString.length === 0) {
     nextRaw = newString
@@ -791,7 +1017,7 @@ export async function runLegacyEdit(params: {
       throw new Error("old_string must match exactly one location")
     }
 
-    const start = snapshot.raw.indexOf(oldString)
+    start = snapshot.raw.indexOf(oldString)
     nextRaw = `${snapshot.raw.slice(0, start)}${newString}${snapshot.raw.slice(start + oldString.length)}`
   }
 
@@ -814,6 +1040,15 @@ export async function runLegacyEdit(params: {
     operations: 1,
     additions: Math.max(0, after.lines.length - snapshot.lines.length),
     removals: Math.max(0, snapshot.lines.length - after.lines.length),
+    diffPreview: buildOperationDiffPreview(snapshot, [{
+      op: "replace",
+      spliceStart: start,
+      deleteCount: oldLines.length,
+      insertLines: newLines,
+      order: 0,
+      anchorIndex: oldLines.length > 0 ? start : undefined,
+      label: oldString.length === 0 ? "set_file" : `replace(old_string)`,
+    }]),
   })
 }
 
@@ -841,15 +1076,18 @@ export function parsePatchText(patchText: string): {
   if (parsed && typeof parsed === "object") {
     const obj = parsed as {
       filePath?: string
-      operations?: HashlineOperation[]
+      file_path?: string
+      operations?: HashlineOperationInput[]
       expectedFileHash?: string
+      expected_file_hash?: string
       fileRev?: string
+      file_rev?: string
     }
     return {
-      filePath: obj.filePath,
+      filePath: firstNonEmptyString(obj.filePath, obj.file_path),
       operations: obj.operations,
-      expectedFileHash: obj.expectedFileHash,
-      fileRev: obj.fileRev,
+      expectedFileHash: firstNonEmptyString(obj.expectedFileHash, obj.expected_file_hash),
+      fileRev: firstNonEmptyString(obj.fileRev, obj.file_rev),
     }
   }
 
@@ -860,17 +1098,23 @@ export type HashlineOperationInput = {
   op: HashlineOpName
   ref?: string
   startRef?: string
+  start_ref?: string
   endRef?: string
+  end_ref?: string
   content?: string
+  replacement?: string
 }
 
 export function mapOperationInput(input: HashlineOperationInput): HashlineOperation {
+  const startRef = firstNonEmptyString(input.startRef, input.start_ref)
+  const endRef = firstNonEmptyString(input.endRef, input.end_ref)
+
   return {
     op: input.op,
     ref: input.ref,
-    startRef: input.startRef,
-    endRef: input.endRef,
-    content: input.content,
+    startRef,
+    endRef,
+    content: input.content ?? input.replacement,
   }
 }
 
