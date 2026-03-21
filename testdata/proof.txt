@@ -1,0 +1,10 @@
+# New Test File
+This file was created by the hashline plugin.
+
+Features demonstrated:
+- Read
+- Edit
+- Patch
+- Write
+
+Status: All operations successful!
