@@ -1,7 +1,7 @@
 import { tool } from "@opencode-ai/plugin"
 import {
   mapOperationInput,
-  runHashlineOperations,
+  runHashlineOperationsDetailed,
   type HashlineOperationInput,
 } from "./hashline-core"
 
@@ -90,7 +90,7 @@ export default tool({
     }
 
     if (hasOperations) {
-      return runHashlineOperations({
+      const result = await runHashlineOperationsDetailed({
         filePath,
         operations: (args.operations as HashlineOperationInput[]).map(mapOperationInput),
         expectedFileHash: args.expectedFileHash,
@@ -99,6 +99,11 @@ export default tool({
         dryRun: args.dryRun,
         context,
       })
+      return JSON.stringify({
+        summary: result.summary,
+        diff: result.metadata.filediff,
+        files: result.metadata.files,
+      }, null, 2)
     }
 
     if (!args.operation) {
@@ -117,7 +122,7 @@ export default tool({
       content: args.replacement ?? args.content,
     }
 
-    return runHashlineOperations({
+    const result = await runHashlineOperationsDetailed({
       filePath,
       operations: [mapOperationInput(singleOperation)],
       expectedFileHash: args.expectedFileHash,
@@ -126,5 +131,10 @@ export default tool({
       dryRun: args.dryRun,
       context,
     })
+    return JSON.stringify({
+      summary: result.summary,
+      diff: result.metadata.filediff,
+      files: result.metadata.files,
+    }, null, 2)
   },
 })

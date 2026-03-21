@@ -1,5 +1,5 @@
 import { tool } from "@opencode-ai/plugin"
-import { runHashlineOperations } from "./hashline-core"
+import { runHashlineOperationsDetailed } from "./hashline-core"
 
 export default tool({
   description: "Hashline-compatible full file writer implemented through set_file operation.",
@@ -24,7 +24,7 @@ export default tool({
       .describe("Validate and compute result without writing file."),
   },
   async execute(args, context) {
-    return runHashlineOperations({
+    const result = await runHashlineOperationsDetailed({
       filePath: args.filePath,
       operations: [
         {
@@ -37,5 +37,10 @@ export default tool({
       dryRun: args.dryRun,
       context,
     })
+    return JSON.stringify({
+      summary: result.summary,
+      diff: result.metadata.filediff,
+      files: result.metadata.files,
+    }, null, 2)
   },
 })

@@ -2,7 +2,7 @@ import { tool } from "@opencode-ai/plugin"
 import {
   mapOperationInput,
   parsePatchText,
-  runHashlineOperations,
+  runHashlineOperationsDetailed,
   type HashlineOperationInput,
 } from "./hashline-core"
 
@@ -45,7 +45,7 @@ export default tool({
       throw new Error("No operations found in patchText")
     }
 
-    return runHashlineOperations({
+    const result = await runHashlineOperationsDetailed({
       filePath,
       operations: (operations as HashlineOperationInput[]).map(mapOperationInput),
       expectedFileHash: parsed.expectedFileHash ?? args.expectedFileHash,
@@ -53,5 +53,11 @@ export default tool({
       dryRun: args.dryRun,
       context,
     })
+
+    return JSON.stringify({
+      summary: result.summary,
+      diff: result.metadata.filediff,
+      files: result.metadata.files,
+    }, null, 2)
   },
 })

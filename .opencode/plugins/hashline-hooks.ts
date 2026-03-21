@@ -15,8 +15,8 @@ import {
   type HashlineRuntimeConfig,
 } from "./hashline-shared"
 
-const FILE_READ_TOOLS = ["read", "file_read", "read_file", "cat", "view"]
-const FILE_EDIT_TOOLS = ["edit", "write", "patch", "apply_patch", "file_edit", "file_write", "edit_file", "multiedit", "batch"]
+const FILE_READ_TOOLS = ["hashline_read", "read", "file_read", "read_file", "cat", "view"]
+const FILE_EDIT_TOOLS = ["hashline_edit", "hashline_write", "hashline_patch", "edit", "write", "patch", "apply_patch", "file_edit", "file_write", "edit_file", "multiedit", "batch"]
 
 function toolEndsWith(tool: string, known: string[]): boolean {
   const lower = tool.toLowerCase()

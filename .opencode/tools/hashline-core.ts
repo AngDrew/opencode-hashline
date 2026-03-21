@@ -24,6 +24,28 @@ export interface HashlineOperation {
   content?: string
 }
 
+export interface HashlineOperationResultMetadata {
+  filediff: {
+    file: string
+    before: string
+    after: string
+    additions: number
+    deletions: number
+  }
+  files: Array<{
+    filePath: string
+    before: string
+    after: string
+    additions: number
+    deletions: number
+  }>
+}
+
+export interface HashlineOperationResult {
+  summary: string
+  metadata: HashlineOperationResultMetadata
+}
+
 interface FileSnapshot {
   absolutePath: string
   raw: string
@@ -565,6 +587,49 @@ function formatEditResult(params: {
   ].join("\n")
 }
 
+interface HashlineExecutionParams {
+  filePath: string
+  operations: HashlineOperation[]
+  expectedFileHash?: string
+  fileRev?: string
+  safeReapply?: boolean
+  dryRun?: boolean
+  context?: { directory?: string }
+}
+
+function buildOperationResult(params: {
+  filePath: string
+  mode: "hashline" | "legacy"
+  dryRun: boolean
+  before: FileSnapshot
+  after: FileSnapshot
+  operations: number
+  additions: number
+  removals: number
+}): HashlineOperationResult {
+  return {
+    summary: formatEditResult(params),
+    metadata: {
+      filediff: {
+        file: params.filePath,
+        before: params.before.raw,
+        after: params.after.raw,
+        additions: params.additions,
+        deletions: params.removals,
+      },
+      files: [
+        {
+          filePath: params.filePath,
+          before: params.before.raw,
+          after: params.after.raw,
+          additions: params.additions,
+          deletions: params.removals,
+        },
+      ],
+    },
+  }
+}
+
 function countOccurrences(haystack: string, needle: string): number {
   if (needle.length === 0) {
     return 0
@@ -632,15 +697,7 @@ export async function runHashlineRead(params: {
   ].join("\n")
 }
 
-export async function runHashlineOperations(params: {
-  filePath: string
-  operations: HashlineOperation[]
-  expectedFileHash?: string
-  fileRev?: string
-  safeReapply?: boolean
-  dryRun?: boolean
-  context?: { directory?: string }
-}): Promise<string> {
+export async function runHashlineOperationsDetailed(params: HashlineExecutionParams): Promise<HashlineOperationResult> {
   const absolutePath = resolveFilePath(params.filePath, params.context)
   const existingSnapshot = await readSnapshotIfExists(absolutePath)
 
@@ -673,7 +730,7 @@ export async function runHashlineOperations(params: {
     await writeSnapshot(after)
   }
 
-  return formatEditResult({
+  return buildOperationResult({
     filePath: params.filePath,
     mode: "hashline",
     dryRun: Boolean(params.dryRun),
@@ -683,6 +740,11 @@ export async function runHashlineOperations(params: {
     additions: applied.additions,
     removals: applied.removals,
   })
+}
+
+export async function runHashlineOperations(params: HashlineExecutionParams): Promise<string> {
+  const result = await runHashlineOperationsDetailed(params)
+  return result.summary
 }
 
 export async function runLegacyEdit(params: {
