@@ -842,6 +842,7 @@ function buildOperationResult(params: {
   operations: number
   additions: number
   removals: number
+  diffPreview?: string
 }): HashlineOperationResult {
   return {
     summary: formatEditResult(params),
