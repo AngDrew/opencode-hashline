@@ -1,6 +1,6 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import { HashlineRouting as routingPlugin } from "../.opencode/plugins/hashline-routing"
-import { hashlineResolveEditTool } from "../.opencode/tools/hashline-resolve-edit"
+import { hashlineResolveEditTool } from "../.opencode/tools/resolve-hash-edit"
 
 const hashlinePlugin: Plugin = async (input) => {
   const routingHooks = await routingPlugin(input)
@@ -9,7 +9,7 @@ const hashlinePlugin: Plugin = async (input) => {
     ...routingHooks,
     // Register helper tool for hashline-to-native edit conversion
     tool: {
-      hashline_resolve_edit: hashlineResolveEditTool,
+      resolve_hash_edit: hashlineResolveEditTool,
     },
     // Don't override read/edit/write/patch - let OpenCode's native tools handle them
     // The hooks will intercept and transform inputs/outputs

@@ -1,6 +1,6 @@
 {
   "name": "@angdrew/opencode-hashline-plugin",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Hashline-based read/edit/patch/write tool overrides for OpenCode.",
   "repository": {
     "type": "git",
@@ -45,6 +45,7 @@
     "@opencode-ai/plugin": "^1.2.22"
   },
   "devDependencies": {
+    "@opencode-ai/plugin": "1.2.27",
     "@types/node": "^22.13.10",
     "typescript": "^5.8.2"
   }

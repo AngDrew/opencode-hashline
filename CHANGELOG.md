@@ -4,12 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-03-22
+
+### Changed
+
+- Renamed helper tool from `hashline_resolve_edit` to `resolve_hash_edit` (shortened name).
+- Moved `hashline-resolve-edit.ts` to `resolve-hash-edit.ts`.
+
+### Fixed
+
+- Fixed TypeScript build error caused by version mismatch between root and `.opencode/` plugin dependencies.
+- Added `@opencode-ai/plugin` as a devDependency to align versions.
+
 ## [1.4.0] - 2026-03-22
 
 ### Added
 
 - Moved hashline-core from tools/ to lib/ to prevent auto-loading as a custom tool.
-- Created hashline-resolve-edit tool for hashline operations resolution.
+- Created resolve-hash-edit tool for hashline operations resolution.
 
 ### Fixed
 
