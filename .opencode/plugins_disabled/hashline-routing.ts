@@ -1,6 +1,6 @@
 import type { Plugin } from "@opencode-ai/plugin"
-import { createHashlineHooks } from "./hashline-hooks"
-import { HashlineAnnotationCache, resolveHashlineConfig } from "./hashline-shared"
+import { createHashlineHooks } from "./hashline-hooks.js"
+import { HashlineAnnotationCache, resolveHashlineConfig } from "./hashline-shared.js"
 
 /**
  * Hashline routing only normalizes tool arguments and aliases tool names.

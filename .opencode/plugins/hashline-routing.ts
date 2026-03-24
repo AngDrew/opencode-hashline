@@ -1,6 +1,6 @@
 import type { Plugin } from "@opencode-ai/plugin"
-import { createHashlineHooks } from "./hashline-hooks"
-import { HashlineAnnotationCache, resolveHashlineConfig } from "./hashline-shared"
+import { createHashlineHooks } from "./hashline-hooks.js"
+import { HashlineAnnotationCache, resolveHashlineConfig } from "./hashline-shared.js"
 
 /**
  * Hashline routing only normalizes tool arguments and aliases tool names.
@@ -18,13 +18,13 @@ function normalizeName(name: string): string {
 function normalizeArgs(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
   const out = { ...args }
 
-  // The native read contract expects `path`, while the rest of the routing
+  // The native read contract expects `filePath`, while the rest of the routing
   // layer keeps the legacy snake_case -> camelCase bridge for edit-style tools.
   if (toolName === "read") {
-    if (typeof out.path !== "string") {
-      if (typeof out.file_path === "string") out.path = out.file_path
-      else if (typeof out.filePath === "string") out.path = out.filePath
-      else if (typeof out.file === "string") out.path = out.file
+    if (typeof out.filePath !== "string") {
+      if (typeof out.path === "string") out.filePath = out.path
+      else if (typeof out.file_path === "string") out.filePath = out.file_path
+      else if (typeof out.file === "string") out.filePath = out.file
     }
   }
 

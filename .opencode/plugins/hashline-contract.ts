@@ -97,11 +97,7 @@ function normalizeRefText(refString: string): string {
     text = text.slice(1).trimStart()
   }
 
-  if (text.toUpperCase().startsWith(`${DEFAULT_PREFIX} `)) {
-    text = text.slice(DEFAULT_PREFIX.length).trimStart()
-  } else if (text.toUpperCase().startsWith(DEFAULT_PREFIX)) {
-    text = text.slice(DEFAULT_PREFIX.length).trimStart()
-  }
+  text = text.replace(/^(?:#HL|;;;)\s*/i, "")
 
   text = text.split("|")[0].trim()
   return text.toUpperCase()
@@ -113,7 +109,7 @@ function normalizeRevToken(revInput: string): string {
     return text.toUpperCase()
   }
 
-  const match = text.match(/^(?:#HL\s*)?REV:([A-F0-9]{8})$/i)
+  const match = text.match(/^(?:#HL|;;;)?\s*REV:([A-F0-9]{8})$/i)
   if (!match) {
     throw new Error(`Invalid REV token "${revInput}". Expected REV:<8-char hex> or a raw 8-char hash.`)
   }

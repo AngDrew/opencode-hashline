@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-03-25
+
+### Fixed
+
+- Fixed native `read` tool argument name - now correctly uses `filePath` instead of `path` to match OpenCode's native tool contract
+- Fixed `glob`/`grep` misclassification - they are no longer treated as file reads (was causing failures when these tools legitimately use `path` as a directory parameter)
+- Unified hashline format to `#HL` prefix everywhere (removed `;;;` default drift between contract and shared config)
+
+### Changed
+
+- System instruction is now minimal - hashline guidance moved to `tool.definition` hook on native `read`/`edit` tools
+- Removed `resolve_hash_edit` helper from default public tool surface (still available for debug/internal use)
+- Added explicit whitelist for file read tools (`read`, `view` only) instead of path-based heuristic
+
 ## [1.6.0] - 2026-03-24
 
 ### Added

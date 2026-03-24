@@ -22,7 +22,6 @@ import {
   type HashlineRuntimeConfig,
 } from "./hashline-shared.js"
 
-const FILE_READ_TOOLS = ["hashline_read", "read", "file_read", "read_file", "cat", "view"]
 const FILE_EDIT_TOOLS = ["hashline_edit", "hashline_write", "hashline_patch", "edit", "write", "patch", "apply_patch", "file_edit", "file_write", "edit_file", "multiedit", "batch"]
 
 function toolEndsWith(tool: string, known: string[]): boolean {
@@ -30,19 +29,9 @@ function toolEndsWith(tool: string, known: string[]): boolean {
   return known.some((item) => lower === item || lower.endsWith(`.${item}`))
 }
 
-function isFileReadTool(tool: string, args?: Record<string, unknown>): boolean {
-  if (toolEndsWith(tool, FILE_READ_TOOLS)) {
-    return true
-  }
-
-  const candidate = extractPathFromToolArgs(args)
-  if (!candidate) {
-    return false
-  }
-
+function isFileReadTool(tool: string, _args?: Record<string, unknown>): boolean {
   const lower = tool.toLowerCase()
-  const writeHints = ["write", "edit", "patch", "execute", "run", "command", "shell", "bash"]
-  return !writeHints.some((hint) => lower.includes(hint))
+  return lower === "read" || lower === "view" || lower.endsWith(".read") || lower.endsWith(".view")
 }
 
 function isFileEditTool(tool: string): boolean {
@@ -381,13 +370,27 @@ async function annotateChatMessageParts(
 
 type HashlinePluginHooks = Pick<
   Hooks,
-  "tool.execute.before" | "tool.execute.after" | "experimental.chat.system.transform" | "chat.message"
+  | "tool.definition"
+  | "tool.execute.before"
+  | "tool.execute.after"
+  | "experimental.chat.system.transform"
+  | "chat.message"
 >
 
 export function createHashlineHooks(config: HashlineRuntimeConfig, cache?: HashlineAnnotationCache): HashlinePluginHooks {
   const effectiveCache = cache ?? new HashlineAnnotationCache(config.cacheSize ?? 128)
 
   return {
+    "tool.definition": async (input, output) => {
+      if (input.toolID === "read") {
+        output.description = `${output.description}\n\nHashline: Returns annotated output with stable line references (#HL prefix). Use these refs in subsequent edit calls.`
+      }
+
+      if (input.toolID === "edit") {
+        output.description = `${output.description}\n\nHashline: Accepts hashline refs (e.g., #HL 12#A3F#9BC) from read output for precise edits. Pass the 8-char REV hash as fileRev for validation.`
+      }
+    },
+
     "tool.execute.before": async (input, output) => {
       const name = input.tool
 
@@ -428,6 +431,10 @@ export function createHashlineHooks(config: HashlineRuntimeConfig, cache?: Hashl
         return
       }
 
+      if (output.output.includes("<type>directory</type>")) {
+        return
+      }
+
       const filePathFromArgs = extractPathFromToolArgs(args)
       if (typeof filePathFromArgs !== "string") {
         return
@@ -449,23 +456,31 @@ export function createHashlineHooks(config: HashlineRuntimeConfig, cache?: Hashl
         return
       }
 
-      const annotated = await runHashlineRead({
-        filePath: filePathFromArgs,
-        offset,
-        limit,
-        context: {
-          directory: typeof (input as Record<string, unknown>).directory === "string"
-            ? ((input as Record<string, unknown>).directory as string)
-            : undefined,
-        },
-      })
+      try {
+        const annotated = await runHashlineRead({
+          filePath: filePathFromArgs,
+          offset,
+          limit,
+          context: {
+            directory: typeof (input as Record<string, unknown>).directory === "string"
+              ? ((input as Record<string, unknown>).directory as string)
+              : undefined,
+          },
+        })
 
-      if (config.maxFileSize > 0 && getByteLength(annotated) > config.maxFileSize) {
+        if (typeof annotated !== "string") {
+          return
+        }
+
+        if (config.maxFileSize > 0 && getByteLength(annotated) > config.maxFileSize) {
+          return
+        }
+
+        effectiveCache.set(cacheKey, sourceKey, annotated)
+        output.output = annotated
+      } catch {
         return
       }
-
-      effectiveCache.set(cacheKey, sourceKey, annotated)
-      output.output = annotated
     },
 
     "experimental.chat.system.transform": async (_input, output) => {

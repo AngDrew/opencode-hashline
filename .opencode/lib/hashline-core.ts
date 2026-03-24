@@ -154,7 +154,7 @@ export function splitContentToLines(content: string): string[] {
 }
 
 export function parseLineRef(rawRef: string): { lineNumber: number; hash: string; anchor?: string } {
-  const text = rawRef.trim().replace(/^#HL\s+/i, "")
+  const text = rawRef.trim().replace(/^(?:#HL|;;;)\s*/i, "")
   const beforePipe = text.split("|")[0].trim()
   const match = beforePipe.match(/^(\d+)\s*[#: ]\s*([A-Za-z0-9]+)(?:\s*[#: ]\s*([A-Za-z0-9]+))?$/)
   if (!match) {

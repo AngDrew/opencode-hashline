@@ -7,7 +7,7 @@ const config = {
   exclude: [],
   maxFileSize: 1_048_576,
   cacheSize: 16,
-  prefix: ";;;",
+  prefix: "#HL",
   fileRev: true,
   safeReapply: false,
 }

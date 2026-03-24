@@ -10,6 +10,7 @@ import {
   computeFileRev as computeCoreFileRev,
   getAdaptiveHashLength,
 } from "../dist/.opencode/lib/hashline-core.js"
+import { createHashlineHooks } from "../dist/.opencode/plugins/hashline-hooks.js"
 
 const PROJECT_ROOT = process.cwd()
 
@@ -28,6 +29,10 @@ async function loadSharedModule() {
   await fs.copyFile(
     path.join(PROJECT_ROOT, "dist/.opencode/lib/hashline-core.js"),
     path.join(libDir, "hashline-core.js"),
+  )
+  await fs.copyFile(
+    path.join(PROJECT_ROOT, "dist/.opencode/plugins/hashline-contract.js"),
+    path.join(pluginsDir, "hashline-contract.js"),
   )
 
   const originalShared = await fs.readFile(path.join(PROJECT_ROOT, "dist/.opencode/plugins/hashline-shared.js"), "utf8")
@@ -80,12 +85,32 @@ test("formatWithHashline and stripHashlinePrefixes round-trip basics", () => {
   const source = "one\ntwo\nthree"
 
   const formatted = formatWithHashline(source, { includeFileRev: true })
-  assert.match(formatted, /^;;;REV:[A-F0-9]{8}$/m)
+  assert.match(formatted, /^#HL REV:[A-F0-9]{8}$/m)
+  assert.match(formatted, /^#HL 1#[A-F0-9]{3}#[A-F0-9]{3}\|one$/m)
   assert.equal(stripHashlinePrefixes(formatted), source)
 
   const noPrefixFormatted = formatWithHashline(source, { prefix: false })
   assert.match(noPrefixFormatted, /^1#[A-F0-9]{3}#[A-F0-9]{3}\|one$/m)
   assert.equal(stripHashlinePrefixes(noPrefixFormatted, false), source)
+})
+
+test("glob and grep are not treated as reads", async () => {
+  const hooks = createHashlineHooks({
+    exclude: [],
+    maxFileSize: 1_048_576,
+    cacheSize: 10,
+    prefix: "#HL",
+    fileRev: true,
+    safeReapply: false,
+  })
+
+  const globOutput = { output: "src/file.ts\nsrc/other.ts" }
+  await hooks["tool.execute.after"]?.({ tool: "glob", args: { path: "src/file.ts" } }, globOutput)
+  assert.equal(globOutput.output, "src/file.ts\nsrc/other.ts")
+
+  const grepOutput = { output: "src/file.ts:1:hello" }
+  await hooks["tool.execute.after"]?.({ tool: "grep", args: { path: "src/file.ts" } }, grepOutput)
+  assert.equal(grepOutput.output, "src/file.ts:1:hello")
 })
 
 test("shouldExclude matches common glob-style patterns", () => {

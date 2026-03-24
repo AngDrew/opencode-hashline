@@ -17,7 +17,7 @@ export interface HashlineRuntimeConfig {
 
 const CONFIG_FILENAME = "opencode-hashline.json"
 
-export const DEFAULT_PREFIX = ";;;"
+export const DEFAULT_PREFIX = "#HL"
 
 export const DEFAULT_EXCLUDE_PATTERNS: string[] = [
   "**/node_modules/**",
@@ -170,12 +170,13 @@ interface HashlineFormatOptions {
 
 export function formatWithHashline(content: string, options?: HashlineFormatOptions): string {
   const effectivePrefix = options?.prefix === undefined ? DEFAULT_PREFIX : options.prefix === false ? "" : options.prefix
+  const prefixPart = effectivePrefix.length > 0 ? `${effectivePrefix} ` : ""
   const normalized = content.includes("\r\n") ? content.replace(/\r\n/g, "\n") : content
   const lines = normalized.split("\n")
   const output: string[] = []
 
   if (options?.includeFileRev) {
-    output.push(`${effectivePrefix}REV:${computeFileRev(normalized)}`)
+    output.push(`${prefixPart}REV:${computeFileRev(normalized)}`)
   }
 
   const hashLength = getAdaptiveHashLength(lines.length)
@@ -183,7 +184,7 @@ export function formatWithHashline(content: string, options?: HashlineFormatOpti
     const line = lines[idx]
     const lineHash = hashlineLineHash(line, hashLength)
     const anchorHash = hashlineAnchorHash(lines[idx - 1], line, lines[idx + 1], hashLength)
-    output.push(`${effectivePrefix}${idx + 1}#${lineHash}#${anchorHash}|${line}`)
+    output.push(`${prefixPart}${idx + 1}#${lineHash}#${anchorHash}|${line}`)
   }
 
   return output.join("\n")
@@ -201,12 +202,12 @@ export function formatWithRuntimeConfig(
 
 export function stripHashlinePrefixes(content: string, prefix?: string | false): string {
   const effectivePrefix = prefix === undefined ? DEFAULT_PREFIX : prefix === false ? "" : prefix
-  const escapedPrefix = escapeRegex(effectivePrefix)
+  const escapedPrefix = effectivePrefix.length > 0 ? `${escapeRegex(effectivePrefix)}\\s*` : ""
   const lineEnding = content.includes("\r\n") ? "\r\n" : "\n"
   const normalized = lineEnding === "\r\n" ? content.replace(/\r\n/g, "\n") : content
 
-  const refPattern = new RegExp(`^([+\\- ])?${escapedPrefix}\\d+\\s*[#: ]\\s*[A-Za-z0-9]+(?:\\s*[#: ]\\s*[A-Za-z0-9]+)?\\|`)
-  const revPattern = new RegExp(`^${escapedPrefix}REV:[A-Za-z0-9]{8}$`)
+  const refPattern = new RegExp(`^([+\\- ])?${escapedPrefix}\\d+\\s*[#: ]\\s*[A-Za-z0-9]+(?:\\s*[#: ]\\s*[A-Za-z0-9]+)?\\|`, "i")
+  const revPattern = new RegExp(`^${escapedPrefix}REV:[A-Za-z0-9]{8}$`, "i")
 
   const stripped = normalized
     .split("\n")
@@ -229,31 +230,9 @@ export const HASHLINE_SYSTEM_INSTRUCTION_MARKER = "<!-- hashline-instruction-v1 
 const HASHLINE_SYSTEM_INSTRUCTION_END_MARKER = "<!-- /hashline-instruction-v1 -->"
 
 export function buildHashlineSystemInstruction(config: Pick<HashlineRuntimeConfig, "prefix">): string {
-  const prefix = config.prefix === false ? "" : config.prefix
-
   return [
     HASHLINE_SYSTEM_INSTRUCTION_MARKER,
-    "## Hashline",
-    "",
-    "Hashline adds stable line references to file operations.",
-    `Annotated lines use \`${prefix}<line>#<hash>#<anchor>|<content>\` (e.g., \`${prefix}12#A3F#9BC|const value = 1\`).`,
-    `Read output includes \`${prefix}REV:<hash>\`; pass the 8-char hash as \`fileRev\` when editing.`,
-    "Use native `read` to get refs, then native `edit` with `ref` or `startRef`/`endRef` parameters.",
-    "",
-    "```json",
-    "[",
-    "  { \"read\": { \"path\": \"src/app.ts\" } },",
-    "  {",
-    "    \"edit\": {",
-    "      \"path\": \"src/app.ts\",",
-    "      \"fileRev\": \"1A2B3C4D\",",
-    "      \"ref\": \"12#A3F#9BC\",",
-    "      \"content\": \"const value = 2\"",
-    "    }",
-    "  }",
-    "]",
-    "```",
-    "If edit fails with hash mismatch, read the file again for fresh refs.",
+    "This project uses hashline line references. See tool descriptions for usage.",
     HASHLINE_SYSTEM_INSTRUCTION_END_MARKER,
   ].join("\n")
 }

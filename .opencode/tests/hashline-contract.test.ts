@@ -2,13 +2,16 @@ import test from "node:test"
 import assert from "node:assert/strict"
 
 import {
+  DEFAULT_PREFIX,
   buildEditExample,
   buildReadExample,
+  formatAnnotatedLine,
   formatRef,
   formatRev,
   normalizeRev,
   parseRef,
 } from "../../dist/.opencode/plugins/hashline-contract.js"
+import { DEFAULT_PREFIX as SHARED_DEFAULT_PREFIX } from "../../dist/.opencode/plugins/hashline-shared.js"
 
 test("formatRef produces canonical line references", () => {
   assert.equal(formatRef(12, "a3f"), "12#A3F")
@@ -53,6 +56,10 @@ test("example builders return valid structures", () => {
     limit: 200,
   })
 
+  const example = buildReadExample("src/file.ts")
+  assert.equal(example.filePath, "src/file.ts")
+  assert.equal("path" in example, false)
+
   assert.deepEqual(buildEditExample("src/file.ts", "12#A3F#9BC", "const value = 2"), {
     filePath: "src/file.ts",
     operations: [
@@ -63,6 +70,16 @@ test("example builders return valid structures", () => {
       },
     ],
   })
+})
+
+test("contract constants stay aligned with shared defaults", () => {
+  assert.equal(DEFAULT_PREFIX, SHARED_DEFAULT_PREFIX)
+})
+
+test("formatAnnotatedLine matches the canonical annotated line pattern", () => {
+  const annotated = formatAnnotatedLine("const value = 1", 0, ["const value = 1", "next line"])
+
+  assert.match(annotated, new RegExp(`^${DEFAULT_PREFIX} 1#[A-F0-9]{3}#[A-F0-9]{3}\\|const value = 1$`))
 })
 
 test("formatRef and parseRef round-trip canonically", () => {

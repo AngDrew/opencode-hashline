@@ -25,7 +25,7 @@ The canonical path is therefore built around OpenCode's native `read`, `edit`, a
 
 ## Tools provided
 
-- `read`: native output annotated with hashline refs (`<prefix>REV:...` + `<prefix><line>#<hash>#<anchor>|...`; default prefix is `#HL`)
+- `read`: native output annotated with hashline refs (`<prefix> REV:...` + `<prefix> <line>#<hash>#<anchor>|...`; default prefix is `#HL`)
 - `edit`: accepts hashline refs and is translated by hooks into native file edits
 - `write`: native full-file replacement remains available for direct file writes
 - `resolve-hash-edit`: deprecated internal helper for compatibility only; do not grant it in new agent configs
@@ -49,10 +49,10 @@ The canonical path is therefore built around OpenCode's native `read`, `edit`, a
 
 ```text
 <hashline-file path="..." file_hash="..." total_lines="..." start_line="..." shown_until="...">
-# format: <line>#<hash>#<anchor>|<content>
-#HLREV:72C4946C
-#HL12#A3F#1B2|const x = 1
-#HL13#9BC#3D4|return x
+# format: #HL <line>#<hash>#<anchor>|<content>
+#HL REV:72C4946C
+#HL 12#A3F#1B2|const x = 1
+#HL 13#9BC#3D4|return x
 </hashline-file>
 ```
 
@@ -76,8 +76,8 @@ Batch `edit` mode:
   "expectedFileHash": "AB12CD34EF",
   "fileRev": "72C4946C",
   "operations": [
-    { "op": "replace", "startRef": "#HL13#9BC#3D4", "content": "return x + 1" },
-    { "op": "insert_after", "startRef": "#HL12#A3F#1B2", "content": "console.log(x)" }
+    { "op": "replace", "startRef": "#HL 13#9BC#3D4", "content": "return x + 1" },
+    { "op": "insert_after", "startRef": "#HL 12#A3F#1B2", "content": "console.log(x)" }
   ]
 }
 ```
@@ -97,8 +97,8 @@ Single-operation `edit` mode:
 {
   "filePath": "src/example.ts",
   "operation": "replace",
-  "startRef": "#HL12#A3F#1B2",
-  "endRef": "#HL13#9BC#3D4",
+  "startRef": "#HL 12#A3F#1B2",
+  "endRef": "#HL 13#9BC#3D4",
   "replacement": "const value = 2",
   "fileRev": "72C4946C",
   "safeReapply": true
@@ -142,7 +142,7 @@ Supported keys:
 - `maxFileSize` (`number`) — max bytes; `0` disables size limit
 - `cacheSize` (`number`) — annotation cache entry count
 - `prefix` (`string | false`) — default `"#HL"`; set `false` for no prefix
-- `fileRev` (`boolean`) — include `<prefix>REV:<hash>` in annotated output
+- `fileRev` (`boolean`) — include `<prefix> REV:<hash>` in annotated output
 - `safeReapply` (`boolean`) — default behavior for `edit` safe-reapply handling
 
 Default values:
