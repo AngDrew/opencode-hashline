@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-03-24
+
+### Added
+
+- Created new contract layer (`hashline-contract.ts`) as single source of truth for hashline protocol
+- Added idempotent system instruction injection with marker-based deduplication
+- Added regression tests for contract layer and idempotency
+
+### Changed
+
+- **Major refactor**: Simplified architecture from tool overrides to native tool annotation/translation
+- System instruction now minimal (~30 lines) with clear ref/REV format documentation
+- Removed verbose workflow steps and contradictory guidance from system instruction
+- Updated README to reflect actual architecture (native tools + hooks, not overrides)
+- Changed canonical prefix from `;;;` to `#HL` in all documentation
+- Sample agent permissions simplified to `read`/`edit`/`write` only
+
+### Deprecated
+
+- Resolver helper tool (`resolve_hash_edit`) is now internal/debug-only, no longer taught in prompts
+
+### Fixed
+
+- Fixed double-hook execution in routing plugin
+- Fixed read argument normalization (now handles `path`, `file_path`, `filePath`, `file`)
+- Fixed system instruction duplication issue (now idempotent)
+
 ## [1.5.1] - 2026-03-22
 
 ### Changed

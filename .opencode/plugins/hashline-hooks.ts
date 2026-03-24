@@ -20,7 +20,7 @@ import {
   shouldExclude,
   stripHashlinePrefixes,
   type HashlineRuntimeConfig,
-} from "./hashline-shared"
+} from "./hashline-shared.js"
 
 const FILE_READ_TOOLS = ["hashline_read", "read", "file_read", "read_file", "cat", "view"]
 const FILE_EDIT_TOOLS = ["hashline_edit", "hashline_write", "hashline_patch", "edit", "write", "patch", "apply_patch", "file_edit", "file_write", "edit_file", "multiedit", "batch"]
@@ -51,6 +51,56 @@ function isFileEditTool(tool: string): boolean {
 
 function isNativeEditTool(tool: string): boolean {
   return toolEndsWith(tool, ["edit"])
+}
+
+const HASHLINE_SYSTEM_INSTRUCTION_MARKER_RE = /<!--[\s]*hashline-instruction-v\d+[\s]*-->/i
+const HASHLINE_SYSTEM_INSTRUCTION_BLOCK_RE = /<!--[\s]*hashline-instruction-v\d+[\s]*-->[\s\S]*?(?:<!--[\s]*\/hashline-instruction-v\d+[\s]*-->|$)/gi
+const MAX_SYSTEM_ENTRIES = 128
+
+function normalizeHashlineInstructionEntry(entry: string, instruction: string, keepInstruction: boolean): string {
+  let insertedInstruction = false
+
+  return entry.replace(HASHLINE_SYSTEM_INSTRUCTION_BLOCK_RE, () => {
+    if (!keepInstruction) {
+      return ""
+    }
+
+    if (insertedInstruction) {
+      return ""
+    }
+
+    insertedInstruction = true
+    return instruction
+  })
+}
+
+function updateSystemInstructions(system: string[], instruction: string): string[] {
+  const nextSystem: string[] = []
+  let insertedInstruction = false
+
+  for (const entry of system) {
+    if (!HASHLINE_SYSTEM_INSTRUCTION_MARKER_RE.test(entry)) {
+      nextSystem.push(entry)
+      continue
+    }
+
+    if (!insertedInstruction) {
+      nextSystem.push(normalizeHashlineInstructionEntry(entry, instruction, true))
+      insertedInstruction = true
+      continue
+    }
+
+    const cleaned = normalizeHashlineInstructionEntry(entry, instruction, false)
+    if (cleaned.trim().length > 0) {
+      nextSystem.push(cleaned)
+    }
+  }
+
+  if (!insertedInstruction) {
+    nextSystem.push(instruction)
+  }
+
+  return nextSystem
 }
 
 function getCanonicalPath(filePath: string, input?: Record<string, unknown>): string {
@@ -423,7 +473,14 @@ export function createHashlineHooks(config: HashlineRuntimeConfig, cache?: Hashl
       if (!Array.isArray(target.system)) {
         target.system = []
       }
-      target.system.push(buildHashlineSystemInstruction(config))
+
+      if (target.system.length > MAX_SYSTEM_ENTRIES) {
+        console.warn(
+          `hashline: experimental.chat.system.transform received ${target.system.length} system entries; deduplicating the hashline instruction block to avoid prompt bloat.`,
+        )
+      }
+
+      target.system = updateSystemInstructions(target.system, buildHashlineSystemInstruction(config))
     },
 
     "chat.message": async (input, output) => {

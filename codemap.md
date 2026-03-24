@@ -6,7 +6,7 @@ Provides an OpenCode plugin package that overrides core file tools (`read`, `edi
 ## System Entry Points
 - `src/index.ts`: Plugin entrypoint (`hashlinePlugin`) that composes routing hooks and registers tool handlers.
 - `package.json`: Package metadata, build/publish scripts, export map (`./dist/src/index.js`), and peer dependency on `@opencode-ai/plugin`.
-- `opencode.json`: Local OpenCode runtime config enabling the `hashline-routing` plugin and defining a constrained smoke-test agent.
+- `opencode.json`: Local OpenCode runtime config enabling the `hashline-routing` plugin and defining a constrained smoke-test agent for the canonical read/edit/write flow.
 - `.opencode/plugins/hashline-routing.ts`: Routing integration layer used by `src/index.ts` to inject hook behavior.
 - `.opencode/tools/{read,edit,patch,write}.ts`: Hashline tool implementations wired into the plugin.
 - `.github/workflows/{ci,publish}.yml`: CI validation and npm publish automation on version tags.

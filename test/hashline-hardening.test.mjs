@@ -19,15 +19,15 @@ const SHARED_STUB_REGEX = /import\s*\{\s*getAdaptiveHashLength\s*,\s*hashlineAnc
 
 async function loadSharedModule() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-shared-test-"))
-  const toolsDir = path.join(tempDir, "tools")
+  const libDir = path.join(tempDir, "lib")
   const pluginsDir = path.join(tempDir, "plugins")
 
-  await fs.mkdir(toolsDir, { recursive: true })
+  await fs.mkdir(libDir, { recursive: true })
   await fs.mkdir(pluginsDir, { recursive: true })
 
   await fs.copyFile(
     path.join(PROJECT_ROOT, "dist/.opencode/lib/hashline-core.js"),
-    path.join(toolsDir, "hashline-core.js"),
+    path.join(libDir, "hashline-core.js"),
   )
 
   const originalShared = await fs.readFile(path.join(PROJECT_ROOT, "dist/.opencode/plugins/hashline-shared.js"), "utf8")

@@ -6,7 +6,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/%40angdrew/opencode-hashline-plugin?logo=npm)](https://www.npmjs.com/package/%40angdrew/opencode-hashline-plugin)
 [![npm license](https://img.shields.io/npm/l/%40angdrew/opencode-hashline-plugin)](https://www.npmjs.com/package/%40angdrew/opencode-hashline-plugin)
 
-This repository provides hashline-based OpenCode tool overrides for stable, line-referenced file reads and edits.
+This repository provides hashline annotation and translation support for OpenCode's native file tools. It keeps OpenCode's built-in `read`, `edit`, and `write` tools in place, then uses hooks to annotate reads with stable line references and translate edits back into native file operations.
 
 It is both:
 - a publishable OpenCode plugin package (`@angdrew/opencode-hashline-plugin`), and
@@ -14,38 +14,34 @@ It is both:
 
 ## What it replaces
 
-Drop-in overrides are provided for built-in tool names:
+This project no longer replaces built-in OpenCode tools.
 
-- `read` (and `view` normalized to `read` via plugin)
-- `edit`
-- `patch`
-- `write`
+Instead, it layers two responsibilities on top of the native file workflow:
 
-OpenCode loads tools from `.opencode/tools/` and allows collisions with built-in names; custom tools take precedence according to OpenCode runtime ordering.
+- annotation: add stable hashline refs to `read` output
+- translation: convert hashline-based `edit` requests into native file mutations
+
+The canonical path is therefore built around OpenCode's native `read`, `edit`, and `write` tools, not tool-name overrides.
 
 ## Tools provided
 
-- `read`: returns hash-annotated output (`<prefix>REV:...` + `<prefix><line>#<hash>#<anchor>|...`; default prefix is `;;;`)
-- `edit`: supports both `operations[]` batch mode and single-operation mode (`operation` + `startRef`, optional `endRef`, `safeReapply`)
-- `patch`: accepts `patchText` as JSON payload (array of ops or object with file+ops)
-- `write`: full-file replacement through `set_file`
+- `read`: native output annotated with hashline refs (`<prefix>REV:...` + `<prefix><line>#<hash>#<anchor>|...`; default prefix is `#HL`)
+- `edit`: accepts hashline refs and is translated by hooks into native file edits
+- `write`: native full-file replacement remains available for direct file writes
+- `resolve-hash-edit`: deprecated internal helper for compatibility only; do not grant it in new agent configs
 
 ## Files
 
 ### Package entrypoint
-- `src/index.ts` — exports plugin wiring for routing + tool overrides
+- `src/index.ts` — exports plugin wiring for routing + hook integration
 
 ### OpenCode runtime implementation
-- `.opencode/tools/hashline-core.ts` — hashing, parsing, ref validation, file I/O, operation engine
-- `.opencode/tools/read.ts` — hashline reader
-- `.opencode/tools/edit.ts` — hashline operations (batch + single-operation modes)
-- `.opencode/tools/patch.ts` — patch bridge using JSON operation payloads
-- `.opencode/tools/write.ts` — full file replace through `set_file`
-
-- `.opencode/plugins/hashline-routing.ts` — tool alias + argument normalization (`view -> read`)
-- `.opencode/plugins/hashline-hooks.ts` — read annotation, edit arg normalization/stripping, system instruction injection, chat file-part annotation
-- `.opencode/plugins/hashline-shared.ts` — shared config, formatting, cache, exclusion handling, runtime helpers
-- `opencode.json` — registers plugin `hashline-routing` and includes sample `hashline-test` agent
+- `.opencode/lib/hashline-core.ts` — hashing, parsing, ref validation, file I/O, and operation helpers
+- `.opencode/plugins/hashline-routing.ts` — routing glue for the native tool workflow
+- `.opencode/plugins/hashline-hooks.ts` — read annotation, edit translation, minimal system-instruction injection, and chat file-part annotation
+- `.opencode/plugins/hashline-shared.ts` — shared config, formatting, cache, exclusion handling, and runtime helpers
+- `.opencode/tools/resolve-hash-edit.ts` — deprecated internal helper retained for compatibility only
+- `opencode.json` — repo-root OpenCode config that registers the routing plugin and includes the minimal `hashline-test` agent
 
 ## Read output contract
 
@@ -54,15 +50,23 @@ OpenCode loads tools from `.opencode/tools/` and allows collisions with built-in
 ```text
 <hashline-file path="..." file_hash="..." total_lines="..." start_line="..." shown_until="...">
 # format: <line>#<hash>#<anchor>|<content>
-;;;REV:72C4946C
-;;;12#A3F#1B2|const x = 1
-;;;13#9BC#3D4|return x
+#HLREV:72C4946C
+#HL12#A3F#1B2|const x = 1
+#HL13#9BC#3D4|return x
 </hashline-file>
 ```
 
 References remain valid while referenced line content is unchanged.
 
+The default prefix is `#HL`. If you customize it, keep the same prefix in your project configuration and any prompt examples.
+
 ## Edit operation contract
+
+Canonical workflow:
+
+1. `read` the file to obtain hashline refs
+2. `edit` using those refs so hooks can translate the request into native file changes
+3. `read` again to confirm the result and refresh refs
 
 Batch `edit` mode:
 
@@ -72,8 +76,8 @@ Batch `edit` mode:
   "expectedFileHash": "AB12CD34EF",
   "fileRev": "72C4946C",
   "operations": [
-    { "op": "replace", "startRef": "13#9BC#3D4", "content": "return x + 1" },
-    { "op": "insert_after", "startRef": "12#A3F#1B2", "content": "console.log(x)" }
+    { "op": "replace", "startRef": "#HL13#9BC#3D4", "content": "return x + 1" },
+    { "op": "insert_after", "startRef": "#HL12#A3F#1B2", "content": "console.log(x)" }
   ]
 }
 ```
@@ -93,8 +97,8 @@ Single-operation `edit` mode:
 {
   "filePath": "src/example.ts",
   "operation": "replace",
-  "startRef": "12#A3F#1B2",
-  "endRef": "13#9BC#3D4",
+  "startRef": "#HL12#A3F#1B2",
+  "endRef": "#HL13#9BC#3D4",
   "replacement": "const value = 2",
   "fileRev": "72C4946C",
   "safeReapply": true
@@ -117,20 +121,13 @@ Notes:
   - `operations[]` (batch), or
   - `operation` + `startRef` (+ optional `endRef`).
 
-## Patch contract
+## Helper resolver
 
-`patch` expects `patchText` as JSON (not unified diff). It supports:
+The hashline resolver helper is deprecated and internal only.
 
-1) an array of operations, or
-2) an object with `{ filePath, operations, expectedFileHash, fileRev }`
-
-Example:
-
-```json
-{
-  "patchText": "{\"filePath\":\"src/example.ts\",\"expectedFileHash\":\"AB12CD34EF\",\"fileRev\":\"72C4946C\",\"operations\":[{\"op\":\"delete\",\"startRef\":\"20#F1A#8BC\"}]}"
-}
-```
+- It is kept for compatibility with older experiments and internal flows
+- It should not be treated as part of the public architecture
+- New agent configs should not grant it permissions
 
 ## Configuration (`opencode-hashline.json`)
 
@@ -144,7 +141,7 @@ Supported keys:
 - `exclude` (`string[]`) — glob patterns to skip annotation/edit access checks
 - `maxFileSize` (`number`) — max bytes; `0` disables size limit
 - `cacheSize` (`number`) — annotation cache entry count
-- `prefix` (`string | false`) — default `";;;"`; set `false` for no prefix
+- `prefix` (`string | false`) — default `"#HL"`; set `false` for no prefix
 - `fileRev` (`boolean`) — include `<prefix>REV:<hash>` in annotated output
 - `safeReapply` (`boolean`) — default behavior for `edit` safe-reapply handling
 
@@ -154,11 +151,21 @@ Default values:
 {
   "maxFileSize": 1048576,
   "cacheSize": 100,
-  "prefix": ";;;",
+  "prefix": "#HL",
   "fileRev": true,
   "safeReapply": false
 }
 ```
+
+### Recommended smoke-test agent
+
+The `hashline-test` agent in `opencode.json` is intentionally minimal for the canonical workflow:
+
+- allow only `read`, `edit`, and `write`
+- keep permissions narrow so the sample exercises the native file workflow only
+- deny `bash`, `glob`, `grep`, and `list` so the agent stays deterministic and file-local
+- do not grant any resolver helper in this sample agent
+- the agent config mirrors the simplified permissions model used by the refactored architecture
 
 ## Safety model
 
@@ -166,6 +173,7 @@ Default values:
 - Optional `expectedFileHash` and `fileRev` reject stale edits when file contents changed.
 - Overlapping operations in one request are rejected.
 - Config sanitization applies validation and safe bounds to runtime-config values.
+- System instruction injection is minimal and idempotent, so repeated hook application does not duplicate policy text.
 
 ## Development
 
@@ -204,5 +212,5 @@ The workflow validates that tag version and `package.json` version match, then r
 
 ## Notes
 
-- Local Node sanity checks can fail for tool wrappers if `@opencode-ai/plugin` is not installed in the directory. These wrappers are intended for OpenCode runtime.
+- Local Node sanity checks can fail if `@opencode-ai/plugin` is not installed in the directory. The runtime hook files are intended for OpenCode execution.
 - Core module (`hashline-core.ts`) can be imported standalone for logic validation.

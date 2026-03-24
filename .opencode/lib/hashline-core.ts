@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { promises as fs } from "node:fs"
 import path from "node:path"
+import { DEFAULT_PREFIX, formatAnnotatedLine, formatRev } from "../plugins/hashline-contract.js"
 
 const DEFAULT_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -663,18 +664,16 @@ export async function runHashlineRead(params: {
 
   const startIndex = startLine - 1
   const endIndex = Math.min(snapshot.lines.length, startIndex + limit)
-  const hashLength = getAdaptiveHashLength(snapshot.lines.length)
   const body: string[] = []
 
-  body.push(`#HL REV:${computeFileRev(snapshot.raw)}`)
+  body.push(`${DEFAULT_PREFIX} ${formatRev(computeFileRev(snapshot.raw))}`)
 
   for (let idx = startIndex; idx < endIndex; idx += 1) {
     const line = snapshot.lines[idx]
     const displayLine = line.length > MAX_LINE_LENGTH ? `${line.slice(0, MAX_LINE_LENGTH)}…` : line
-    const lineHash = hashlineLineHash(line, hashLength)
-    const anchorHash = hashlineAnchorHash(snapshot.lines[idx - 1], line, snapshot.lines[idx + 1], hashLength)
-    const ref = `${idx + 1}#${lineHash}#${anchorHash}`
-    body.push(`#HL ${ref}|${displayLine}`)
+    const annotatedLine = formatAnnotatedLine(line, idx, snapshot.lines, DEFAULT_PREFIX)
+    const separatorIndex = annotatedLine.indexOf("|")
+    body.push(`${annotatedLine.slice(0, separatorIndex + 1)}${displayLine}`)
   }
 
   if (snapshot.lines.length === 0) {

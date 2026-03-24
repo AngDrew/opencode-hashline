@@ -1,5 +1,4 @@
 Line 1: First line of test file
-Line 2: Second line of test file
-Line 3: Third line of test file
+Line 2: MODIFIED content for testing
+REPLACED LINES 3-4
 Line 4: Fourth line of test file
-Line 5: Fifth line of test file

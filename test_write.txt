@@ -1,0 +1,5 @@
+# New test file created via hashline write
+#HL REV:TEST1234
+#HL 1#ABC#DEF|First line in new file
+#HL 2#123#456|Second line in new file
+#HL 3#789#ABC|Third line in new file

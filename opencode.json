@@ -5,15 +5,18 @@
     "*": "allow"
   },
   "agent": {
+    // Sample smoke-test agent for the simplified canonical flow.
+    // Keep the permissions narrow so the test exercises only the core file path.
+    // `patch` is intentionally omitted because the standard edit flow uses hashline refs.
+    // No resolver helper is granted here; this agent stays on built-in file tools only.
     "hashline-test": {
-      "description": "Minimal smoke-test agent for hashline tool overrides",
+      "description": "Minimal smoke-test agent for hashline read/edit/write",
       "mode": "primary",
       "model": "proxy/gpt-5.1-codex-mini",
       "permission": {
         "*": "deny",
         "read": "allow",
         "edit": "allow",
-        "patch": "allow",
         "write": "allow",
         "bash": "deny",
         "glob": "deny",

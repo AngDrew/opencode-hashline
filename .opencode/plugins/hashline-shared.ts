@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import { computeFileRev, getAdaptiveHashLength, hashlineAnchorHash, hashlineLineHash } from "../lib/hashline-core.js"
+
 export { computeFileRev }
 
 export interface HashlineRuntimeConfig {
@@ -98,7 +99,6 @@ function sanitizeConfig(input: unknown): Partial<HashlineRuntimeConfig> {
   if (source.prefix === false) {
     out.prefix = false
   } else if (typeof source.prefix === "string") {
-    // Keep prefix simple and printable to avoid prompt/tool injection.
     if (/^[\x20-\x7E]{0,20}$/.test(source.prefix)) {
       out.prefix = source.prefix
     }
@@ -225,65 +225,36 @@ export function stripHashlinePrefixes(content: string, prefix?: string | false):
   return lineEnding === "\r\n" ? stripped.replace(/\n/g, "\r\n") : stripped
 }
 
+export const HASHLINE_SYSTEM_INSTRUCTION_MARKER = "<!-- hashline-instruction-v1 -->"
+const HASHLINE_SYSTEM_INSTRUCTION_END_MARKER = "<!-- /hashline-instruction-v1 -->"
+
 export function buildHashlineSystemInstruction(config: Pick<HashlineRuntimeConfig, "prefix">): string {
   const prefix = config.prefix === false ? "" : config.prefix
 
   return [
-    "## Hashline — Line Reference System",
+    HASHLINE_SYSTEM_INSTRUCTION_MARKER,
+    "## Hashline",
     "",
-    "Hashline augments the native OpenCode file tools. Use only the native `read`, `edit`, and `write` tools by default.",
-    "Never call `hashline-core_*` tools or any internal helper tool names. Use only the native OpenCode tools `read`, `edit`, and `write`.",
+    "Hashline adds stable line references to file operations.",
+    `Annotated lines use \`${prefix}<line>#<hash>#<anchor>|<content>\` (e.g., \`${prefix}12#A3F#9BC|const value = 1\`).`,
+    `Read output includes \`${prefix}REV:<hash>\`; pass the 8-char hash as \`fileRev\` when editing.`,
+    "Use native `read` to get refs, then native `edit` with `ref` or `startRef`/`endRef` parameters.",
     "",
-    `Annotated lines use \`${prefix}<line>#<hash>#<anchor>|<content>\` (example: \`${prefix}12#A3F#9BC|const value = 1\`).`,
-    `Read output also includes \`${prefix}REV:<hash>\`; pass that exact full value as \`file_rev\`/\`fileRev\` when editing. Do not truncate it.`,
-    "",
-    "### Recommended Flow",
-    "",
-    "1. **Read** the file first to get hashline refs and fileRev",
-    "2. **Resolve** hashline operations using `hashline-resolve-edit_hashlineResolveEditTool` helper tool",
-    "3. **Edit** using native `edit` tool with the resolved oldString/newString",
-    "4. **Read again** to verify changes and get fresh refs",
-    "",
-    "### Read first (required before edits)",
     "```json",
-    '{ "file_path": "src/app.ts", "offset": 1, "limit": 200 }',
+    "[",
+    "  { \"read\": { \"path\": \"src/app.ts\" } },",
+    "  {",
+    "    \"edit\": {",
+    "      \"path\": \"src/app.ts\",",
+    "      \"fileRev\": \"1A2B3C4D\",",
+    "      \"ref\": \"12#A3F#9BC\",",
+    "      \"content\": \"const value = 2\"",
+    "    }",
+    "  }",
+    "]",
     "```",
-    "Use refs exactly as returned, including the anchor hash.",
-    "",
-    "### Resolve hashline operations (helper tool)",
-    "Use `hashline-resolve-edit_hashlineResolveEditTool` to convert hashline refs to native edit format:",
-    "```json",
-    "{",
-    '  "filePath": "src/app.ts",',
-    '  "fileRev": "1A2B3C4D",',
-    '  "operations": [',
-    '    { "op": "replace", "ref": "12#A3F#9BC", "content": "const value = 2" },',
-    '    { "op": "insert_after", "ref": "12#A3F#9BC", "content": "console.log(value)" }',
-    "  ]",
-    "}",
-    "```",
-    "Returns JSON with `filePath`, `oldString`, `newString`, `fileRev` for native edit.",
-    "",
-    "### Edit with native edit tool",
-    "After resolving, use native `edit` with the returned values:",
-    "```json",
-    "{",
-    '  "file_path": "src/app.ts",',
-    '  "file_rev": "1A2B3C4D",',
-    '  "old_string": "...",',
-    '  "new_string": "..."',
-    "}",
-    "```",
-    "",
-    "### Write full file content",
-    "```json",
-    '{ "file_path": "src/app.ts", "file_rev": "1A2B3C4D", "content": "full file contents" }',
-    "```",
-    "`write` replaces the entire file.",
-    "",
-    "If an edit fails because refs are stale or the revision changed, read the file again and use the newly returned refs and `REV` value.",
-    "",
-    "After any successful edit/patch/write, run read again before issuing new refs.",
+    "If edit fails with hash mismatch, read the file again for fresh refs.",
+    HASHLINE_SYSTEM_INSTRUCTION_END_MARKER,
   ].join("\n")
 }
 
@@ -309,7 +280,6 @@ export class HashlineAnnotationCache {
       return null
     }
 
-    // Refresh LRU order
     this.entries.delete(key)
     this.entries.set(key, entry)
     return entry.annotated

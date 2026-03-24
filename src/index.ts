@@ -1,8 +1,7 @@
-import type { Plugin } from "@opencode-ai/plugin"
 import { HashlineRouting as routingPlugin } from "../.opencode/plugins/hashline-routing"
 import { hashlineResolveEditTool } from "../.opencode/tools/resolve-hash-edit"
 
-const hashlinePlugin: Plugin = async (input) => {
+const hashlinePlugin = async (input: Parameters<typeof routingPlugin>[0]) => {
   const routingHooks = await routingPlugin(input)
 
   return {
