@@ -113,6 +113,43 @@ test("glob and grep are not treated as reads", async () => {
   assert.equal(grepOutput.output, "src/file.ts:1:hello")
 })
 
+test("read hook refreshes cached annotations when file content changes", async () => {
+  const hooks = createHashlineHooks({
+    exclude: [],
+    maxFileSize: 1_048_576,
+    cacheSize: 10,
+    prefix: "#HL",
+    fileRev: true,
+    safeReapply: false,
+  })
+
+  const afterHook = hooks["tool.execute.after"]
+  assert.equal(typeof afterHook, "function")
+
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hashline-read-cache-test-"))
+  const filePath = path.join(tempDir, "sample.txt")
+
+  try {
+    await fs.writeFile(filePath, "alpha\nbeta\n", "utf8")
+
+    const firstOutput = { output: "alpha\nbeta\n" }
+    await afterHook?.({ tool: "read", args: { path: filePath, offset: 1, limit: 50 } }, firstOutput)
+
+    assert.equal(String(firstOutput.output).includes("beta"), true)
+    assert.equal(String(firstOutput.output).includes("gamma"), false)
+
+    await fs.writeFile(filePath, "alpha\ngamma\n", "utf8")
+
+    const secondOutput = { output: "alpha\ngamma\n" }
+    await afterHook?.({ tool: "read", args: { path: filePath, offset: 1, limit: 50 } }, secondOutput)
+
+    assert.equal(String(secondOutput.output).includes("beta"), false)
+    assert.equal(String(secondOutput.output).includes("gamma"), true)
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true })
+  }
+})
+
 test("shouldExclude matches common glob-style patterns", () => {
   const patterns = ["**/node_modules/**", "**/*.min.js", "src/**/*.ts", "**/.env.*"]
 

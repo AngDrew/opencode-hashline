@@ -12,6 +12,7 @@ import {
   type HashlineOperationInput,
 } from "../lib/hashline-core.js"
 import {
+  buildCacheEntryKey,
   buildHashlineSystemInstruction,
   extractPathFromToolArgs,
   formatWithRuntimeConfig,
@@ -113,8 +114,8 @@ function invalidateFileCache(
   }
 
   const canonicalPath = getCanonicalPath(filePath, input)
-  cache.invalidate(filePath)
-  cache.invalidate(canonicalPath)
+  cache.invalidateVariants(filePath)
+  cache.invalidateVariants(canonicalPath)
 }
 
 function firstString(...values: unknown[]): string | undefined {
@@ -431,7 +432,8 @@ export function createHashlineHooks(config: HashlineRuntimeConfig, cache?: Hashl
         return
       }
 
-      if (output.output.includes("<type>directory</type>")) {
+      const source = output.output
+      if (source.includes("<type>directory</type>")) {
         return
       }
 
@@ -448,9 +450,8 @@ export function createHashlineHooks(config: HashlineRuntimeConfig, cache?: Hashl
 
       const offset = typeof args.offset === "number" ? args.offset : undefined
       const limit = typeof args.limit === "number" ? args.limit : undefined
-      const sourceKey = JSON.stringify({ filePath: canonicalPath, offset, limit })
-      const cacheKey = canonicalPath
-      const cached = effectiveCache.get(cacheKey, sourceKey)
+      const cacheKey = buildCacheEntryKey(canonicalPath, offset, limit)
+      const cached = effectiveCache.get(cacheKey, source)
       if (cached) {
         output.output = cached
         return
@@ -476,7 +477,7 @@ export function createHashlineHooks(config: HashlineRuntimeConfig, cache?: Hashl
           return
         }
 
-        effectiveCache.set(cacheKey, sourceKey, annotated)
+        effectiveCache.set(cacheKey, source, annotated)
         output.output = annotated
       } catch {
         return

@@ -237,6 +237,19 @@ export function buildHashlineSystemInstruction(config: Pick<HashlineRuntimeConfi
   ].join("\n")
 }
 
+const CACHE_KEY_SEPARATOR = "\u0000"
+
+export function buildCacheEntryKey(baseKey: string, ...parts: Array<string | number | undefined>): string {
+  if (parts.length === 0) {
+    return baseKey
+  }
+
+  return [
+    baseKey,
+    ...parts.map((part) => (part === undefined ? "" : String(part))),
+  ].join(CACHE_KEY_SEPARATOR)
+}
+
 interface CacheEntry {
   sourceHash: string
   annotated: string
@@ -284,6 +297,17 @@ export class HashlineAnnotationCache {
 
   invalidate(key: string): void {
     this.entries.delete(key)
+  }
+
+  invalidateVariants(baseKey: string): void {
+    this.entries.delete(baseKey)
+
+    const variantPrefix = `${baseKey}${CACHE_KEY_SEPARATOR}`
+    for (const key of Array.from(this.entries.keys())) {
+      if (key.startsWith(variantPrefix)) {
+        this.entries.delete(key)
+      }
+    }
   }
 
   clear(): void {

@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-04-14
+
+### Fixed
+
+- Fixed stale hashline read cache entries so externally edited files now refresh on subsequent reads instead of showing old annotated content.
+- Made read-cache keys range-aware by file path plus offset/limit, and invalidated all cached variants after edit/write operations.
+- Thanks to @kelvinauta for reporting [issue #2](https://github.com/AngDrew/opencode-hashline/issues/2).
+
 ## [1.6.1] - 2026-03-25
 
 ### Fixed
