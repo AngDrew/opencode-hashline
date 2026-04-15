@@ -99,6 +99,14 @@ test("instruction handles prefix disabled", async () => {
   assert.match(instruction, /Read output stays canonical `#HL`/)
 })
 
+test("instruction falls back to the default prefix when config prefix is missing", async () => {
+  const system = await runSystemTransform(["intro"], { prefix: undefined })
+  const instruction = system[1]
+
+  assert.match(instruction, /Active helper prefix from config: "#HL"/)
+  assert.match(instruction, /Read output stays canonical `#HL`/)
+})
+
 test("tool descriptions nudge agents toward the efficient hashline workflow", async () => {
   const hooks = makeHooks()
   const definition = hooks["tool.definition"]

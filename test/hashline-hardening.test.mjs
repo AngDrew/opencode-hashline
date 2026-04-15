@@ -184,6 +184,22 @@ test("system instruction handles prefix disabled", () => {
   assert.match(instruction, /Read output stays canonical `#HL`/)
 })
 
+test("system instruction falls back to the default prefix when config prefix is missing", async () => {
+  const hooks = makeHooks({ prefix: undefined })
+  const output = { system: ["intro"] }
+  const transform = hooks["experimental.chat.system.transform"]
+
+  if (!transform) {
+    throw new Error("Missing system transform hook")
+  }
+
+  await transform({ model: {} }, output)
+
+  assert.equal(output.system.length, 2)
+  assert.match(output.system[1], /Active helper prefix from config: "#HL"/)
+  assert.match(output.system[1], /Read output stays canonical `#HL`/)
+})
+
 test("tool descriptions guide agents toward batched edit workflows", async () => {
   const hooks = makeHooks()
   const definition = hooks["tool.definition"]

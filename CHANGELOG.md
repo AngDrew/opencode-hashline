@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.6.6] - 2026-04-15
+
+### Fixed
+
+- Prevented the hashline system-instruction helper from crashing when `prefix` is missing and made it fall back to the default `#HL` prefix instead.
+- Added regression coverage for the missing-prefix path in both the root test suite and the source-level hook tests.
+
 ## [1.6.5] - 2026-04-15
 
 ### Changed

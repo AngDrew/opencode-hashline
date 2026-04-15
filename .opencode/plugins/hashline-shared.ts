@@ -229,9 +229,13 @@ export function stripHashlinePrefixes(content: string, prefix?: string | false):
 export const HASHLINE_SYSTEM_INSTRUCTION_MARKER = "<!-- hashline-instruction-v1 -->"
 const HASHLINE_SYSTEM_INSTRUCTION_END_MARKER = "<!-- /hashline-instruction-v1 -->"
 
-function getConfiguredPrefixLabel(prefix: string | false): string {
+function getConfiguredPrefixLabel(prefix?: string | false): string {
   if (prefix === false) {
     return "none"
+  }
+
+  if (typeof prefix !== "string") {
+    return `"${DEFAULT_PREFIX}"`
   }
 
   if (prefix.length === 0) {
