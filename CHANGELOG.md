@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.6.5] - 2026-04-15
+
+### Changed
+
+- Bumped the release version to 1.6.5 because 1.6.4 was already published.
+
 ## [1.6.4] - 2026-04-15
 
 ### Changed
