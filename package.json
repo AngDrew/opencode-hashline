@@ -1,6 +1,6 @@
 {
   "name": "@angdrew/opencode-hashline-plugin",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "description": "Hashline annotation and native-tool edit translation for OpenCode.",
   "repository": {
     "type": "git",

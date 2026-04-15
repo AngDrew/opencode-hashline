@@ -49,11 +49,28 @@ async function loadSharedModule() {
 
 const { tempDir: sharedTempDir, shared } = await loadSharedModule()
 const {
+  buildHashlineSystemInstruction,
   computeFileRev: computeSharedFileRev,
   formatWithHashline,
   shouldExclude,
   stripHashlinePrefixes,
 } = shared
+
+const BASE_CONFIG = {
+  exclude: [],
+  maxFileSize: 1_048_576,
+  cacheSize: 10,
+  prefix: "#HL",
+  fileRev: true,
+  safeReapply: false,
+}
+
+function makeHooks(overrides = {}) {
+  return createHashlineHooks({
+    ...BASE_CONFIG,
+    ...overrides,
+  })
+}
 
 test.after(async () => {
   await fs.rm(sharedTempDir, { recursive: true, force: true })
@@ -95,14 +112,7 @@ test("formatWithHashline and stripHashlinePrefixes round-trip basics", () => {
 })
 
 test("glob and grep are not treated as reads", async () => {
-  const hooks = createHashlineHooks({
-    exclude: [],
-    maxFileSize: 1_048_576,
-    cacheSize: 10,
-    prefix: "#HL",
-    fileRev: true,
-    safeReapply: false,
-  })
+  const hooks = makeHooks()
 
   const globOutput = { output: "src/file.ts\nsrc/other.ts" }
   await hooks["tool.execute.after"]?.({ tool: "glob", args: { path: "src/file.ts" } }, globOutput)
@@ -114,14 +124,7 @@ test("glob and grep are not treated as reads", async () => {
 })
 
 test("read hook refreshes cached annotations when file content changes", async () => {
-  const hooks = createHashlineHooks({
-    exclude: [],
-    maxFileSize: 1_048_576,
-    cacheSize: 10,
-    prefix: "#HL",
-    fileRev: true,
-    safeReapply: false,
-  })
+  const hooks = makeHooks()
 
   const afterHook = hooks["tool.execute.after"]
   assert.equal(typeof afterHook, "function")
@@ -160,4 +163,46 @@ test("shouldExclude matches common glob-style patterns", () => {
   assert.equal(shouldExclude("config/.env.production", patterns), true)
   assert.equal(shouldExclude("src/utils/file.js", patterns), false)
   assert.equal(shouldExclude("README.md", patterns), false)
+})
+
+test("system instruction is config-aware and batch-first", () => {
+  const instruction = buildHashlineSystemInstruction({ prefix: ";;;" })
+
+  assert.match(instruction, /Hashline workflow:/)
+  assert.match(instruction, /`#HL 12#A3F#9BC`/)
+  assert.match(instruction, /`#HL REV:72C4946C`/)
+  assert.match(instruction, /Active helper prefix from config: ";;;"/)
+  assert.match(instruction, /Read output stays canonical `#HL`/)
+  assert.match(instruction, /batch same-file changes into one edit call with operations\[\]/i)
+  assert.match(instruction, /Reread only when you need more context or an edit fails because refs are stale/i)
+})
+
+test("system instruction handles prefix disabled", () => {
+  const instruction = buildHashlineSystemInstruction({ prefix: false })
+
+  assert.match(instruction, /Active helper prefix from config: none/)
+  assert.match(instruction, /Read output stays canonical `#HL`/)
+})
+
+test("tool descriptions guide agents toward batched edit workflows", async () => {
+  const hooks = makeHooks()
+  const definition = hooks["tool.definition"]
+
+  assert.equal(typeof definition, "function")
+
+  const readOutput = { description: "native read", parameters: {} }
+  await definition?.({ toolID: "read" }, readOutput)
+  assert.match(readOutput.description, /canonical #HL refs plus a REV token/i)
+  assert.match(readOutput.description, /plan all same-file changes before calling edit/i)
+
+  const editOutput = { description: "native edit", parameters: {} }
+  await definition?.({ toolID: "edit" }, editOutput)
+  assert.match(editOutput.description, /Accepts refs copied from read/i)
+  assert.match(editOutput.description, /Prefer one batched call per file/i)
+  assert.match(editOutput.description, /operations:\[\{ op, ref\|startRef\/endRef, content\? \}\]/i)
+
+  const writeOutput = { description: "native write", parameters: {} }
+  await definition?.({ toolID: "write" }, writeOutput)
+  assert.match(writeOutput.description, /Use write for new files or full rewrites/i)
+  assert.match(writeOutput.description, /Prefer edit for targeted existing-file changes/i)
 })

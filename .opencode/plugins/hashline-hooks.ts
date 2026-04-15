@@ -14,6 +14,7 @@ import {
 import {
   buildCacheEntryKey,
   buildHashlineSystemInstruction,
+  DEFAULT_PREFIX,
   extractPathFromToolArgs,
   formatWithRuntimeConfig,
   getByteLength,
@@ -383,12 +384,20 @@ export function createHashlineHooks(config: HashlineRuntimeConfig, cache?: Hashl
 
   return {
     "tool.definition": async (input, output) => {
-      if (input.toolID === "read") {
-        output.description = `${output.description}\n\nHashline: Returns annotated output with stable line references (#HL prefix). Use these refs in subsequent edit calls.`
+      if (input.toolID === "read" || input.toolID === "view") {
+        output.description = `${output.description}\n\nHashline: Returns canonical ${DEFAULT_PREFIX} refs plus a REV token. Copy refs exactly from the output, then plan all same-file changes before calling edit.`
       }
 
       if (input.toolID === "edit") {
-        output.description = `${output.description}\n\nHashline: Accepts hashline refs (e.g., #HL 12#A3F#9BC) from read output for precise edits. Pass the 8-char REV hash as fileRev for validation.`
+        output.description = `${output.description}\n\nHashline: Accepts refs copied from read. Prefer one batched call per file with { filePath, fileRev?, operations:[{ op, ref|startRef/endRef, content? }] } instead of many single edits.`
+      }
+
+      if (input.toolID === "write") {
+        output.description = `${output.description}\n\nHashline: Use write for new files or full rewrites. Prefer edit for targeted existing-file changes; hashline prefixes inside content are stripped automatically.`
+      }
+
+      if (input.toolID === "patch") {
+        output.description = `${output.description}\n\nHashline: Compatibility path only. Prefer read -> one batched edit per file for a faster, lower-read workflow.`
       }
     },
 

@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.6.4] - 2026-04-15
+
+### Changed
+
+- Refined the hashline system prompt and tool descriptions to surface the active config prefix, encourage batch-first same-file edits, and reduce unnecessary read/edit loops.
+- Added a short README note about the config-aware batch-first workflow guidance.
+
 ## [1.6.3] - 2026-04-15
 
 ### Changed

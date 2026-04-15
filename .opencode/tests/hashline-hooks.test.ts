@@ -12,12 +12,15 @@ const config = {
   safeReapply: false,
 }
 
-function makeHooks() {
-  return createHashlineHooks(config)
+function makeHooks(overrides = {}) {
+  return createHashlineHooks({
+    ...config,
+    ...overrides,
+  })
 }
 
-async function runSystemTransform(system) {
-  const hooks = makeHooks()
+async function runSystemTransform(system, overrides = {}) {
+  const hooks = makeHooks(overrides)
   const output = { system: [...system] }
   const transform = hooks["experimental.chat.system.transform"]
 
@@ -74,4 +77,49 @@ test("instruction is injected when missing", async () => {
   assert.equal(system[0], "intro")
   assert.equal(system[1], "outro")
   assert.equal(system[2].includes("hashline-instruction-v1"), true)
+})
+
+test("instruction includes batch-first workflow guidance and config-aware prefix notes", async () => {
+  const system = await runSystemTransform(["intro"], { prefix: ";;;" })
+  const instruction = system[1]
+
+  assert.match(instruction, /Hashline workflow:/)
+  assert.match(instruction, /Read returns canonical refs like `#HL 12#A3F#9BC` and `#HL REV:72C4946C`/)
+  assert.match(instruction, /Active helper prefix from config: ";;;"/)
+  assert.match(instruction, /do not rewrite refs just to match config/i)
+  assert.match(instruction, /batch same-file changes into one edit call with operations\[\]/i)
+  assert.match(instruction, /Reread only when you need more context or an edit fails because refs are stale/i)
+})
+
+test("instruction handles prefix disabled", async () => {
+  const system = await runSystemTransform(["intro"], { prefix: false })
+  const instruction = system[1]
+
+  assert.match(instruction, /Active helper prefix from config: none/)
+  assert.match(instruction, /Read output stays canonical `#HL`/)
+})
+
+test("tool descriptions nudge agents toward the efficient hashline workflow", async () => {
+  const hooks = makeHooks()
+  const definition = hooks["tool.definition"]
+
+  if (!definition) {
+    throw new Error("Missing tool definition hook")
+  }
+
+  const readOutput = { description: "native read", parameters: {} }
+  await definition({ toolID: "read" } as any, readOutput as any)
+  assert.match(readOutput.description, /canonical #HL refs plus a REV token/i)
+  assert.match(readOutput.description, /plan all same-file changes before calling edit/i)
+
+  const editOutput = { description: "native edit", parameters: {} }
+  await definition({ toolID: "edit" } as any, editOutput as any)
+  assert.match(editOutput.description, /Accepts refs copied from read/i)
+  assert.match(editOutput.description, /Prefer one batched call per file/i)
+  assert.match(editOutput.description, /operations:\[\{ op, ref\|startRef\/endRef, content\? \}\]/i)
+
+  const writeOutput = { description: "native write", parameters: {} }
+  await definition({ toolID: "write" } as any, writeOutput as any)
+  assert.match(writeOutput.description, /Use write for new files or full rewrites/i)
+  assert.match(writeOutput.description, /Prefer edit for targeted existing-file changes/i)
 })

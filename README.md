@@ -108,7 +108,7 @@ Save it in the project root or in your global OpenCode config.
 | patch | compatibility | routing and legacy support only; not the recommended path |
 | resolve-hash-edit | internal | compatibility and debug helper; do not grant to new agents |
 
-It also adds a small system-instruction hook and annotates file parts that appear in chat messages.
+It also adds a small system-instruction hook and annotates file parts that appear in chat messages. The injected guidance is config-aware, keeps the active prefix in sync, and nudges batch-first edits to reduce extra reads.
 
 ## How it looks in OpenCode
 

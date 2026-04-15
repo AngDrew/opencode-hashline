@@ -229,10 +229,32 @@ export function stripHashlinePrefixes(content: string, prefix?: string | false):
 export const HASHLINE_SYSTEM_INSTRUCTION_MARKER = "<!-- hashline-instruction-v1 -->"
 const HASHLINE_SYSTEM_INSTRUCTION_END_MARKER = "<!-- /hashline-instruction-v1 -->"
 
+function getConfiguredPrefixLabel(prefix: string | false): string {
+  if (prefix === false) {
+    return "none"
+  }
+
+  if (prefix.length === 0) {
+    return '""'
+  }
+
+  return `"${prefix}"`
+}
+
 export function buildHashlineSystemInstruction(config: Pick<HashlineRuntimeConfig, "prefix">): string {
+  const configuredPrefix = getConfiguredPrefixLabel(config.prefix)
+  const canonicalReadRef = `${DEFAULT_PREFIX} 12#A3F#9BC`
+  const canonicalRev = `${DEFAULT_PREFIX} REV:72C4946C`
+
   return [
     HASHLINE_SYSTEM_INSTRUCTION_MARKER,
-    "This project uses hashline line references. See tool descriptions for usage.",
+    "Hashline workflow:",
+    `- Read returns canonical refs like \`${canonicalReadRef}\` and \`${canonicalRev}\`. Copy them exactly as shown.`,
+    `- Active helper prefix from config: ${configuredPrefix}. Read output stays canonical \`${DEFAULT_PREFIX}\`, so do not rewrite refs just to match config.`,
+    "- After one read, batch same-file changes into one edit call with operations[] instead of many single edits.",
+    "- Send fileRev when the read output includes a REV line.",
+    "- Reread only when you need more context or an edit fails because refs are stale.",
+    "- Prefer edit for targeted changes; use write only for new files or full rewrites.",
     HASHLINE_SYSTEM_INSTRUCTION_END_MARKER,
   ].join("\n")
 }
