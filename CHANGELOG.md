@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.6.3] - 2026-04-15
+
+### Changed
+
+- Expanded the README with installation and setup guidance, copy-paste `opencode.json` / `opencode-hashline.json` templates, a native OpenCode read/edit walkthrough, and clearer explanation of the problem hashline solves.
+- Refreshed package metadata wording to match the current hook-based native-tool architecture.
+
 ## [1.6.2] - 2026-04-14
 
 ### Fixed

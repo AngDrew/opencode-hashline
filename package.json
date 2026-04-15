@@ -1,7 +1,7 @@
 {
   "name": "@angdrew/opencode-hashline-plugin",
-  "version": "1.6.2",
-  "description": "Hashline-based read/edit/patch/write tool overrides for OpenCode.",
+  "version": "1.6.3",
+  "description": "Hashline annotation and native-tool edit translation for OpenCode.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/AngDrew/opencode-hashline.git"
