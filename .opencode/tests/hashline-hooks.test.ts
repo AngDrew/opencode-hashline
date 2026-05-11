@@ -131,3 +131,93 @@ test("tool descriptions nudge agents toward the efficient hashline workflow", as
   assert.match(writeOutput.description, /Use write for new files or full rewrites/i)
   assert.match(writeOutput.description, /Prefer edit for targeted existing-file changes/i)
 })
+
+test("edit tool schema is extended with hashline fields", async () => {
+  const hooks = makeHooks()
+  const definition = hooks["tool.definition"]
+
+  if (!definition) {
+    throw new Error("Missing tool definition hook")
+  }
+
+  const editOutput = {
+    description: "native edit",
+    parameters: {
+      type: "object",
+      properties: {
+        filePath: { type: "string" },
+        oldString: { type: "string" },
+        newString: { type: "string" },
+        replaceAll: { type: "boolean" },
+      },
+      required: ["filePath", "oldString", "newString"],
+    },
+  }
+
+  await definition({ toolID: "edit" } as any, editOutput as any)
+
+  const props = editOutput.parameters.properties as Record<string, any>
+
+  // Hashline fields must be declared
+  assert.ok(props.operations, "operations property must exist")
+  assert.equal(props.operations.type, "array")
+  assert.ok(props.operations.items, "operations.items must exist")
+  assert.ok(props.operations.items.properties.op, "op property must exist in operation items")
+  assert.ok(props.operations.items.properties.ref, "ref property must exist in operation items")
+  assert.ok(props.operations.items.properties.startRef, "startRef property must exist in operation items")
+  assert.ok(props.operations.items.properties.endRef, "endRef property must exist in operation items")
+  assert.ok(props.operations.items.properties.content, "content property must exist in operation items")
+
+  assert.ok(props.fileRev, "fileRev property must exist")
+  assert.equal(props.fileRev.type, "string")
+
+  assert.ok(props.safeReapply, "safeReapply property must exist")
+  assert.equal(props.safeReapply.type, "boolean")
+
+  // Native fields must still be present
+  assert.ok(props.filePath, "filePath must still exist")
+  assert.ok(props.oldString, "oldString must still exist")
+  assert.ok(props.newString, "newString must still exist")
+  assert.ok(props.replaceAll, "replaceAll must still exist")
+
+  // required must no longer include oldString/newString (they conflict with hashline-style args)
+  const required = editOutput.parameters.required as string[]
+  assert.ok(required.includes("filePath"), "filePath must remain required")
+  assert.ok(!required.includes("oldString"), "oldString must not be required")
+  assert.ok(!required.includes("newString"), "newString must not be required")
+})
+
+test("edit tool schema extension is safe when parameters is empty", async () => {
+  const hooks = makeHooks()
+  const definition = hooks["tool.definition"]
+
+  if (!definition) {
+    throw new Error("Missing tool definition hook")
+  }
+
+  // Simulate an empty parameters object (no properties or required)
+  const editOutput = { description: "native edit", parameters: {} }
+  await definition({ toolID: "edit" } as any, editOutput as any)
+
+  const params = editOutput.parameters as Record<string, any>
+  assert.ok(params.properties, "properties must be created")
+  assert.ok(params.properties.operations, "operations must be added even to empty params")
+  assert.ok(params.properties.fileRev, "fileRev must be added even to empty params")
+  assert.ok(params.properties.safeReapply, "safeReapply must be added even to empty params")
+})
+
+test("non-edit tools do not get schema modifications", async () => {
+  const hooks = makeHooks()
+  const definition = hooks["tool.definition"]
+
+  if (!definition) {
+    throw new Error("Missing tool definition hook")
+  }
+
+  const readOutput = { description: "native read", parameters: { properties: {}, required: [] } }
+  await definition({ toolID: "read" } as any, readOutput as any)
+
+  const readProps = readOutput.parameters.properties as Record<string, any>
+  assert.equal(readProps.operations, undefined, "read tool should not get operations property")
+  assert.equal(readProps.fileRev, undefined, "read tool should not get fileRev property")
+})
