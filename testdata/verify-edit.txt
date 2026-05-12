@@ -1,6 +1,0 @@
-alpha
-bravo-replaced
-charlie
-delta-modified
-echo
-foxtrot

@@ -1,4 +1,5 @@
 import { tool } from "@opencode-ai/plugin"
+import { createTwoFilesPatch } from "diff"
 import {
   runHashlineOperationsDetailed,
   mapOperationInput,
@@ -102,15 +103,22 @@ export default tool({
         },
       })
 
-      const diff = result.metadata.filediff
-      const additions = diff.additions
-      const deletions = diff.deletions
+      const { file, before, after, additions, deletions } = result.metadata.filediff
 
-      if (diff.before === diff.after) {
+      if (before === after) {
         return "Error: No changes made. The edits produced identical content. Re-read the file and provide content that differs from the current lines."
       }
 
-      return `Updated ${args.filePath} (+${additions} -${deletions})`
+      const patch = createTwoFilesPatch(file, file, before, after)
+
+      return {
+        output: `Updated ${args.filePath} (+${additions} -${deletions})`,
+        metadata: {
+          diff: patch,
+          filediff: { file, patch, additions, deletions },
+          diagnostics: {},
+        },
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       return `Error: ${message}\nTip: re-read the file to get fresh refs and fileRev.`
