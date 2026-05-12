@@ -5,11 +5,8 @@ import { tmpdir } from "node:os"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { Hooks } from "@opencode-ai/plugin"
 import {
-  mapOperationInput,
   resolveFilePath,
   runHashlineRead,
-  runHashlineOperationsDetailed,
-  type HashlineOperationInput,
 } from "../lib/hashline-core.js"
 import {
   buildCacheEntryKey,
@@ -38,10 +35,6 @@ function isFileReadTool(tool: string, _args?: Record<string, unknown>): boolean 
 
 function isFileEditTool(tool: string): boolean {
   return toolEndsWith(tool, FILE_EDIT_TOOLS)
-}
-
-function isNativeEditTool(tool: string): boolean {
-  return toolEndsWith(tool, ["edit"])
 }
 
 const HASHLINE_SYSTEM_INSTRUCTION_MARKER_RE = /<!--[\s]*hashline-instruction-v\d+[\s]*-->/i
@@ -117,113 +110,6 @@ function invalidateFileCache(
   const canonicalPath = getCanonicalPath(filePath, input)
   cache.invalidateVariants(filePath)
   cache.invalidateVariants(canonicalPath)
-}
-
-function firstString(...values: unknown[]): string | undefined {
-  for (const value of values) {
-    if (typeof value === "string" && value.length > 0) {
-      return value
-    }
-  }
-
-  return undefined
-}
-
-function firstBoolean(...values: unknown[]): boolean | undefined {
-  for (const value of values) {
-    if (typeof value === "boolean") {
-      return value
-    }
-  }
-
-  return undefined
-}
-
-function hasHashlineEditShape(args: Record<string, unknown>): boolean {
-  return (
-    Array.isArray(args.operations) ||
-    typeof args.operation === "string" ||
-    typeof args.ref === "string" ||
-    typeof args.startRef === "string" ||
-    typeof args.start_ref === "string"
-  )
-}
-
-function toHashlineOperations(args: Record<string, unknown>): HashlineOperationInput[] | null {
-  if (Array.isArray(args.operations) && args.operations.length > 0) {
-    return args.operations.map((entry) => {
-      const item = (entry ?? {}) as Record<string, unknown>
-      return {
-        op: String(item.op ?? "") as HashlineOperationInput["op"],
-        ref: firstString(item.ref),
-        startRef: firstString(item.startRef, item.start_ref),
-        endRef: firstString(item.endRef, item.end_ref),
-        content: firstString(item.content, item.replacement),
-      }
-    })
-  }
-
-  const operation = firstString(args.operation)
-  if (!operation) {
-    return null
-  }
-
-  const ref = firstString(args.ref)
-  const startRef = firstString(args.startRef, args.start_ref, ref)
-  const endRef = firstString(args.endRef, args.end_ref)
-  const content = firstString(args.replacement, args.content)
-
-  if (!startRef && !ref) {
-    return null
-  }
-
-  return [
-    {
-      op: operation === "replace" && endRef ? "replace_range" : (operation as HashlineOperationInput["op"]),
-      ref,
-      startRef,
-      endRef,
-      content,
-    },
-  ]
-}
-
-async function translateHashlineEditArgs(
-  args: Record<string, unknown>,
-  input: Record<string, unknown>,
-  config: HashlineRuntimeConfig,
-): Promise<Record<string, unknown> | null> {
-  if (!hasHashlineEditShape(args)) {
-    return null
-  }
-
-  const filePath = firstString(args.filePath, args.file_path, args.path, args.file)
-  if (!filePath) {
-    return null
-  }
-
-  const operations = toHashlineOperations(args)
-  if (!operations || operations.length === 0) {
-    return null
-  }
-
-  const result = await runHashlineOperationsDetailed({
-    filePath,
-    operations: operations.map(mapOperationInput),
-    expectedFileHash: firstString(args.expectedFileHash, args.expected_file_hash),
-    fileRev: firstString(args.fileRev, args.file_rev),
-    safeReapply: firstBoolean(args.safeReapply, args.safe_reapply) ?? config.safeReapply,
-    dryRun: true,
-    context: {
-      directory: typeof input.directory === "string" ? input.directory : undefined,
-    },
-  })
-
-  return {
-    filePath,
-    oldString: result.metadata.filediff.before,
-    newString: result.metadata.filediff.after,
-  }
 }
 
 const CONTENT_FIELD_KEYS = new Set([
@@ -388,10 +274,6 @@ export function createHashlineHooks(config: HashlineRuntimeConfig, cache?: Hashl
         output.description = `${output.description}\n\nHashline: Returns canonical ${DEFAULT_PREFIX} refs plus a REV token. Copy refs exactly from the output, then plan all same-file changes before calling edit.`
       }
 
-      if (input.toolID === "edit") {
-        output.description = `${output.description}\n\nHashline: Accepts refs copied from read. Prefer one batched call per file with { filePath, fileRev?, operations:[{ op, ref|startRef/endRef, content? }] } instead of many single edits.`
-      }
-
       if (input.toolID === "write") {
         output.description = `${output.description}\n\nHashline: Use write for new files or full rewrites. Prefer edit for targeted existing-file changes; hashline prefixes inside content are stripped automatically.`
       }
@@ -409,21 +291,7 @@ export function createHashlineHooks(config: HashlineRuntimeConfig, cache?: Hashl
       }
 
       const args = (output.args ?? {}) as Record<string, unknown>
-      const sanitizedArgs = stripNestedHashes(args, config.prefix) as Record<string, unknown>
-
-      if (isNativeEditTool(name)) {
-        const translatedArgs = await translateHashlineEditArgs(
-          sanitizedArgs,
-          input as Record<string, unknown>,
-          config,
-        )
-        if (translatedArgs) {
-          output.args = translatedArgs
-          return
-        }
-      }
-
-      output.args = sanitizedArgs
+      output.args = stripNestedHashes(args, config.prefix) as Record<string, unknown>
     },
 
     "tool.execute.after": async (input, output) => {

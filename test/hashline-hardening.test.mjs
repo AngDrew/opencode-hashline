@@ -211,14 +211,65 @@ test("tool descriptions guide agents toward batched edit workflows", async () =>
   assert.match(readOutput.description, /canonical #HL refs plus a REV token/i)
   assert.match(readOutput.description, /plan all same-file changes before calling edit/i)
 
-  const editOutput = { description: "native edit", parameters: {} }
-  await definition?.({ toolID: "edit" }, editOutput)
-  assert.match(editOutput.description, /Accepts refs copied from read/i)
-  assert.match(editOutput.description, /Prefer one batched call per file/i)
-  assert.match(editOutput.description, /operations:\[\{ op, ref\|startRef\/endRef, content\? \}\]/i)
+  // The edit tool is now a custom tool replacement (in .opencode/tools/edit.ts)
+  // so the tool.definition hook no longer modifies its description or schema.
 
   const writeOutput = { description: "native write", parameters: {} }
   await definition?.({ toolID: "write" }, writeOutput)
   assert.match(writeOutput.description, /Use write for new files or full rewrites/i)
   assert.match(writeOutput.description, /Prefer edit for targeted existing-file changes/i)
+})
+
+test("edit tool definition hook no longer modifies edit schema (custom tool replaces it)", async () => {
+  const hooks = makeHooks()
+  const definition = hooks["tool.definition"]
+
+  assert.equal(typeof definition, "function")
+
+  const editOutput = {
+    description: "native edit",
+    parameters: {
+      type: "object",
+      properties: {
+        filePath: { type: "string" },
+        oldString: { type: "string" },
+        newString: { type: "string" },
+        replaceAll: { type: "boolean" },
+      },
+      required: ["filePath", "oldString", "newString"],
+    },
+  }
+
+  await definition?.({ toolID: "edit" }, editOutput)
+
+  const props = editOutput.parameters.properties
+
+  // The hook should NOT add hashline fields to the edit schema anymore
+  assert.equal(props.operations, undefined, "operations should not be injected")
+  assert.equal(props.fileRev, undefined, "fileRev should not be injected")
+  assert.equal(props.safeReapply, undefined, "safeReapply should not be injected")
+
+  // Description should not be modified for edit tool
+  assert.equal(editOutput.description, "native edit", "edit description should not be modified by hook")
+
+  // required should remain untouched
+  const required = editOutput.parameters.required
+  assert.ok(required.includes("oldString"), "oldString should still be required (unchanged)")
+  assert.ok(required.includes("newString"), "newString should still be required (unchanged)")
+})
+
+test("non-edit tools do not get schema modifications", async () => {
+  const hooks = makeHooks()
+  const definition = hooks["tool.definition"]
+
+  assert.equal(typeof definition, "function")
+
+  const readOutput = {
+    description: "native read",
+    parameters: { type: "object", properties: {}, required: [] },
+  }
+  await definition?.({ toolID: "read" }, readOutput)
+
+  assert.equal(readOutput.parameters.properties.operations, undefined, "read tool should not get operations property")
+  assert.equal(readOutput.parameters.properties.fileRev, undefined, "read tool should not get fileRev property")
 })
