@@ -1,45 +1,25 @@
 {
   "name": "@angdrew/opencode-hashline-plugin",
-  "version": "1.6.6",
-  "description": "Hashline annotation and native-tool edit translation for OpenCode.",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/AngDrew/opencode-hashline.git"
-  },
-  "homepage": "https://github.com/AngDrew/opencode-hashline#readme",
-  "bugs": {
-    "url": "https://github.com/AngDrew/opencode-hashline/issues"
-  },
+  "version": "2.0.0",
+  "description": "Hashline-powered read/edit for OpenCode. Annotates reads with stable #HL refs and replaces native edit with direct hashline-powered file editing.",
   "type": "module",
-  "main": "./dist/src/index.js",
-  "types": "./dist/src/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/src/index.d.ts",
-      "import": "./dist/src/index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   },
-  "files": [
-    "dist",
-    "README.md"
-  ],
+  "files": ["dist", "README.md"],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc",
     "test": "node --test",
-    "bench": "node bench/runner.mjs",
-    "bench:legacy": "node scripts/benchmark.mjs",
     "pack:check": "npm pack --dry-run",
     "prepublishOnly": "npm run build"
   },
-  "publishConfig": {
-    "access": "public"
-  },
-  "keywords": [
-    "opencode",
-    "plugin",
-    "hashline",
-    "tools"
-  ],
+  "publishConfig": { "access": "public" },
+  "keywords": ["opencode", "plugin", "hashline", "edit", "read"],
   "license": "MIT",
   "peerDependencies": {
     "@opencode-ai/plugin": "^1.2.22"
