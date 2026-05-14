@@ -1,9 +1,56 @@
 import { access, readFile, unlink, writeFile } from "node:fs/promises"
+import * as path from "node:path"
+import { createTwoFilesPatch, diffLines } from "diff"
+import { Effect } from "effect"
 import type { ToolContext } from "@opencode-ai/plugin"
+
+async function runMaybeEffect<T>(value: T | Promise<T> | any): Promise<T> {
+  if (value == null) return value as T
+  if (typeof (value as any).then === "function") return await (value as Promise<T>)
+  const isEffectV4 =
+    typeof value === "object" && "~effect/Effect/args" in (value as any)
+  const isEffectV3 = (value as any)._id === "Effect"
+  if (isEffectV4 || isEffectV3) {
+    return await Effect.runPromise(value as any)
+  }
+  return value as T
+}
 import type { HashlineEdit } from "./edit-ops.js"
 import { applyHashlineEdits, HashlineMismatchError } from "./edit-ops.js"
 import { canonicalizeFileText, restoreFileText } from "./file-text.js"
 import { getAdaptiveHashLength, lineHash, anchorHash, computeFileRev } from "./hash.js"
+
+function trimDiff(diff: string): string {
+  const lines = diff.split("\n")
+  const contentLines = lines.filter(
+    (line) =>
+      (line.startsWith("+") || line.startsWith("-") || line.startsWith(" ")) &&
+      !line.startsWith("---") &&
+      !line.startsWith("+++"),
+  )
+  if (contentLines.length === 0) return diff
+  let min = Infinity
+  for (const line of contentLines) {
+    const content = line.slice(1)
+    if (content.trim().length > 0) {
+      const match = content.match(/^(\s*)/)
+      if (match) min = Math.min(min, match[1].length)
+    }
+  }
+  if (min === Infinity || min === 0) return diff
+  return lines
+    .map((line) => {
+      if (
+        (line.startsWith("+") || line.startsWith("-") || line.startsWith(" ")) &&
+        !line.startsWith("---") &&
+        !line.startsWith("+++")
+      ) {
+        return line[0] + line.slice(1).slice(min)
+      }
+      return line
+    })
+    .join("\n")
+}
 
 export interface EditToolArgs {
   filePath: string
@@ -49,20 +96,17 @@ export async function executeEditTool(
   args: EditToolArgs,
   context: ToolContext,
 ): Promise<string> {
-  const filePath = args.filePath
-  if (!filePath) return "Error: filePath is required"
+  if (!args.filePath) return "Error: filePath is required"
+  const filePath = path.isAbsolute(args.filePath)
+    ? args.filePath
+    : path.join(context.directory, args.filePath)
+  const worktree = context.worktree ?? context.directory
+  const relPath = path.relative(worktree, filePath) || filePath
 
   const operations = toEditOps(args)
   if (operations.length === 0 && args.oldString === undefined) {
     return "Error: No operations or oldString provided"
   }
-
-  await context.ask({
-    permission: "edit",
-    patterns: [filePath],
-    always: ["*"],
-    metadata: { filePath, tool: "edit" },
-  })
 
   try {
     const exists = await access(filePath).then(() => true).catch(() => false)
@@ -106,43 +150,41 @@ export async function executeEditTool(
     if (result.noopEdits > 0 && result.content === envelope.content) {
       return `Error: No changes made to ${filePath}. The edits produced identical content.`
     }
-
     const writeContent = restoreFileText(result.content, envelope)
-    await writeFile(filePath, writeContent, "utf-8")
 
-    const additions = Math.max(0, result.content.split("\n").length - envelope.content.split("\n").length)
-    const deletions = Math.max(0, envelope.content.split("\n").length - result.content.split("\n").length)
-
-    const diffLines: string[] = []
-    const beforeLines = envelope.content.split("\n")
-    const afterLines = result.content.split("\n")
-    const maxLen = Math.max(beforeLines.length, afterLines.length)
-    for (let i = 0; i < maxLen; i++) {
-      if ((beforeLines[i] ?? "") !== (afterLines[i] ?? "")) {
-        if (beforeLines[i] !== undefined) diffLines.push(`-${beforeLines[i]}`)
-        if (afterLines[i] !== undefined) diffLines.push(`+${afterLines[i]}`)
-      }
+    let additions = 0
+    let deletions = 0
+    for (const change of diffLines(envelope.content, result.content)) {
+      if (change.added) additions += change.count || 0
+      if (change.removed) deletions += change.count || 0
     }
+
+    const diffStr = trimDiff(
+      createTwoFilesPatch(filePath, filePath, envelope.content, result.content),
+    )
+
+    await runMaybeEffect(
+      context.ask({
+        permission: "edit",
+        patterns: [relPath],
+        always: [relPath],
+        metadata: { filepath: filePath, diff: diffStr },
+      }),
+    )
+
+    await writeFile(filePath, writeContent, "utf-8")
 
     if (typeof (context as any).metadata === "function") {
       (context as any).metadata({
-        title: filePath,
         metadata: {
-          filePath,
+          diff: diffStr,
           filediff: {
             file: filePath,
-            before: rawOldContent,
-            after: writeContent,
+            patch: diffStr,
             additions,
             deletions,
           },
-          diff: diffLines.join("\n"),
-          firstChangedLine: (() => {
-            for (let i = 0; i < maxLen; i++) {
-              if ((beforeLines[i] ?? "") !== (afterLines[i] ?? "")) return i + 1
-            }
-            return undefined
-          })(),
+          diagnostics: {},
         },
       })
     }
