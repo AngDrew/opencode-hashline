@@ -30,6 +30,7 @@ function normalizeArgs(toolName: string, args: Record<string, unknown>): Record<
 
   if (toolName === "edit") {
     if (typeof out.file_path === "string" && typeof out.filePath !== "string") out.filePath = out.file_path
+    if (typeof out.path === "string" && typeof out.filePath !== "string") out.filePath = out.path
     if (typeof out.start_ref === "string" && typeof out.startRef !== "string") out.startRef = out.start_ref
     if (typeof out.end_ref === "string" && typeof out.endRef !== "string") out.endRef = out.end_ref
     if (typeof out.safe_reapply === "boolean" && typeof out.safeReapply !== "boolean") out.safeReapply = out.safe_reapply
@@ -41,6 +42,7 @@ function normalizeArgs(toolName: string, args: Record<string, unknown>): Record<
   if (toolName === "patch") {
     if (typeof out.patch_text === "string" && typeof out.patchText !== "string") out.patchText = out.patch_text
     if (typeof out.file_path === "string" && typeof out.filePath !== "string") out.filePath = out.file_path
+    if (typeof out.path === "string" && typeof out.filePath !== "string") out.filePath = out.path
     if (typeof out.expected_file_hash === "string" && typeof out.expectedFileHash !== "string") out.expectedFileHash = out.expected_file_hash
     if (typeof out.file_rev === "string" && typeof out.fileRev !== "string") out.fileRev = out.file_rev
     if (typeof out.dry_run === "boolean" && typeof out.dryRun !== "boolean") out.dryRun = out.dry_run
@@ -48,6 +50,7 @@ function normalizeArgs(toolName: string, args: Record<string, unknown>): Record<
 
   if (toolName === "write") {
     if (typeof out.file_path === "string" && typeof out.filePath !== "string") out.filePath = out.file_path
+    if (typeof out.path === "string" && typeof out.filePath !== "string") out.filePath = out.path
     if (typeof out.expected_file_hash === "string" && typeof out.expectedFileHash !== "string") out.expectedFileHash = out.expected_file_hash
     if (typeof out.file_rev === "string" && typeof out.fileRev !== "string") out.fileRev = out.file_rev
     if (typeof out.dry_run === "boolean" && typeof out.dryRun !== "boolean") out.dryRun = out.dry_run
